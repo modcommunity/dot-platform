@@ -1,0 +1,22 @@
+# Godot 4
+.godot/
+/android/
+
+# Every other dot-* addon is a separate repository. For local development they are
+# symlinked; a consumer copies the ones it wants instead. dot_platform is the only
+# thing this repository ships.
+/addons/dot_core
+/addons/dot_auth
+/addons/dot_user
+/addons/dot_user_avatar
+/addons/dot_server
+/addons/dot_net
+/addons/dot_fps_controller
+
+# Exports
+build/
+export_presets.cfg
+
+# OS
+.DS_Store
+Thumbs.db
