@@ -18,8 +18,8 @@ dot-auth says who you are. dot-user says what we know about you. dot-user-avatar
 says what you look like. None of them knows about the others — that is what makes
 them adoptable one at a time — and so nothing joined them up. This does.
 
-Part of the [dot-\*](../) family. Requires [dot-core](../dot-core) and
-[dot-server](../dot-server); finds dot-auth, dot-user and dot-user-avatar at runtime
+Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core) and
+[dot-server](https://github.com/modcommunity/dot-server); finds dot-auth, dot-user and dot-user-avatar at runtime
 and works with any subset of them, including none.
 
 ## Install
