@@ -6,6 +6,7 @@
 # symlinked; a consumer copies the ones it wants instead. dot_platform is the only
 # thing this repository ships.
 /addons/dot_core
+/addons/dot_cloud
 /addons/dot_auth
 /addons/dot_user
 /addons/dot_user_avatar
