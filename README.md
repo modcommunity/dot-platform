@@ -14,7 +14,7 @@ I intend on reviewing code, testing, and editing documentation regularly. If you
 ## Identity, Profile and Avatar, Joined Up
 The piece that turns the dot-\* family into something a person can sign into.
 
-dot-auth says who you are. dot-user says what we know about you. dot-user-avatar says what you look like. None of them knows about the others — that is what makes them adoptable one at a time — and so nothing joined them up. This does.
+dot-auth says who you are. dot-user says what we know about you. dot-user-avatar says what you look like. None of them knows about the others, which is what makes them adoptable one at a time, and so nothing joined them up. This does.
 
 Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core) and [dot-server](https://github.com/modcommunity/dot-server); finds dot-auth, dot-user and dot-user-avatar at runtime and works with any subset of them, including none.
 
@@ -31,7 +31,7 @@ add_child(hub)
 var admitted := await hub.admit(identity)      # identity from dot-auth
 var player: DotPlatformPlayer = admitted.value
 
-player.key()            # scoped id — what everything else uses
+player.key()            # scoped id, what everything else uses
 player.display_name()   # from the profile, falling back to the identity
 player.avatar           # resolved, conformed, entitlement-checked
 ```
@@ -77,7 +77,7 @@ godot --headless --path . res://examples/seam_selftest.tscn      # 62 checks
 godot --headless --path . res://examples/sandbox_server.tscn     # 22 checks
 ```
 
-`sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink` over loopback and lets the whole signon run — transport, challenge, credentials, authentication, content, load, spawn — with the platform resolving a profile and an avatar along the way. Nothing is called by hand.
+`sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink` over loopback and lets the whole signon run, through transport, challenge, credentials, authentication, content, load and spawn, with the platform resolving a profile and an avatar along the way. Nothing is called by hand.
 
 It found two bugs in dot-server on its first run, both of which made a client unable to join at all. See `CLAUDE.md`.
 

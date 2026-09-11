@@ -136,7 +136,7 @@ thing this repository ships. Create the links before validating:
 ```bash
 for a in dot_core:dot-core dot_auth:dot-auth dot_user:dot-user \
          dot_user_avatar:dot-user-avatar dot_server:dot-server \
-         dot_net:dot-net dot_fps_controller:dot-fps-controller; do
+         dot_net:dot-net dot_player_controller:dot-player-controller; do
     ln -sfn "../../${a##*:}/addons/${a%%:*}" "addons/${a%%:*}"
 done
 ```
@@ -163,7 +163,7 @@ sends nothing to a client itself, which keeps it out of the netcode's business.
 ## Things deliberately not here
 
 - **A game.** The sandbox example spawns a player and stops. What they do next —
-  building, scripting, physics — is a game, and dot-fps-controller and dot-net are
+  building, scripting, physics — is a game, and dot-player-controller and dot-net are
   what it would be built on.
 - **The avatar editor UI.** dot-user-avatar's `choices_for` is what it would use.
 - **Matchmaking, discovery, a server browser.** Backend work, named as the largest
