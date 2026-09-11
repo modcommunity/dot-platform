@@ -14,19 +14,13 @@ I intend on reviewing code, testing, and editing documentation regularly. If you
 ## Identity, Profile and Avatar, Joined Up
 The piece that turns the dot-\* family into something a person can sign into.
 
-dot-auth says who you are. dot-user says what we know about you. dot-user-avatar
-says what you look like. None of them knows about the others — that is what makes
-them adoptable one at a time — and so nothing joined them up. This does.
+dot-auth says who you are. dot-user says what we know about you. dot-user-avatar says what you look like. None of them knows about the others — that is what makes them adoptable one at a time — and so nothing joined them up. This does.
 
-Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core) and
-[dot-server](https://github.com/modcommunity/dot-server); finds dot-auth, dot-user and dot-user-avatar at runtime
-and works with any subset of them, including none.
+Part of the [dot-\*](https://github.com/modcommunity) family. Requires [dot-core](https://github.com/modcommunity/dot-core) and [dot-server](https://github.com/modcommunity/dot-server); finds dot-auth, dot-user and dot-user-avatar at runtime and works with any subset of them, including none.
 
 ## Install
 
-Copy `addons/dot_platform/` and `addons/dot_core/` into your project, plus whichever
-of dot-auth, dot-user and dot-user-avatar you want. Enable them in
-*Project → Project Settings → Plugins*.
+Copy `addons/dot_platform/` and `addons/dot_core/` into your project, plus whichever of dot-auth, dot-user and dot-user-avatar you want. Enable them in *Project → Project Settings → Plugins*.
 
 ## Use
 
@@ -48,9 +42,7 @@ On a dot-server, load the module instead and it does all of that per connection:
 server.modules.load_module("res://addons/dot_platform/dot_platform_module.gd")
 ```
 
-It finds the hub through `DotRegistry`, admits every authenticated client, puts the
-result on `session.data["platform"]`, applies the profile's name, and releases the
-state when they leave. It adds `platform_status` and `platform_name` to the console.
+It finds the hub through `DotRegistry`, admits every authenticated client, puts the result on `session.data["platform"]`, applies the profile's name, and releases the state when they leave. It adds `platform_status` and `platform_name` to the console.
 
 ## The translation it exists to do
 
@@ -60,10 +52,7 @@ identity.uid          "backbone:acc-1"     global; a server must never see this
    -> avatar filed under the SAME scoped key
 ```
 
-Keying the avatar on the account id instead works perfectly in testing and quietly
-hands every server operator a global identifier for every player. `DotPlatformHub` is
-the only place that translation happens, and `DotPlatformPlayer.account_uid()` is
-named to be conspicuous at the call site.
+Keying the avatar on the account id instead works perfectly in testing and quietly hands every server operator a global identifier for every player. `DotPlatformHub` is the only place that translation happens, and `DotPlatformPlayer.account_uid()` is named to be conspicuous at the call site.
 
 ## Everything optional stays optional
 
@@ -74,8 +63,7 @@ named to be conspicuous at the call site.
 | neither | a player with a name from the identity and no scoped key |
 | a broken store | the player still gets in, visible, with nothing persisted over |
 
-A sandbox that required all three to start would be unusable on the first day of a
-project, which is the day people decide whether to adopt something.
+A sandbox that required all three to start would be unusable on the first day of a project, which is the day people decide whether to adopt something.
 
 ## Examples
 
@@ -89,12 +77,8 @@ godot --headless --path . res://examples/seam_selftest.tscn      # 62 checks
 godot --headless --path . res://examples/sandbox_server.tscn     # 22 checks
 ```
 
-`sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink`
-over loopback and lets the whole signon run — transport, challenge, credentials,
-authentication, content, load, spawn — with the platform resolving a profile and an
-avatar along the way. Nothing is called by hand.
+`sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink` over loopback and lets the whole signon run — transport, challenge, credentials, authentication, content, load, spawn — with the platform resolving a profile and an avatar along the way. Nothing is called by hand.
 
-It found two bugs in dot-server on its first run, both of which made a client unable
-to join at all. See `CLAUDE.md`.
+It found two bugs in dot-server on its first run, both of which made a client unable to join at all. See `CLAUDE.md`.
 
 MIT licensed.
