@@ -200,7 +200,7 @@ func _build() -> bool:
 
 	# The module finds the hub through DotRegistry, which is why load_module taking a
 	# path rather than an instance is not a problem.
-	var loaded := _server.modules.load_module(
+	var loaded: DotResult = await _server.modules.load_module(
 		"res://addons/dot_platform/dot_platform_module.gd"
 	)
 
