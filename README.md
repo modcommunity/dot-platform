@@ -81,4 +81,6 @@ godot --headless --path . res://examples/sandbox_server.tscn     # 22 checks
 
 It found two bugs in dot-server on its first run, both of which made a client unable to join at all. See `CLAUDE.md`.
 
-MIT licensed.
+## Licence
+
+MIT. See [LICENSE](LICENSE).
