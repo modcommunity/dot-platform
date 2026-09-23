@@ -30,7 +30,9 @@ extends DotModule
 ## [code]PLATFORM.md[/code], and this module is deliberately structured so it becomes
 ## a smaller file rather than a rewrite when the stage lands.
 
-const CHANNEL := "platform.module"
+# No CHANNEL constant: this module logs -- admission, refusal, onboarding -- through
+# DotModule.log_info/log_warn, which write on "mod.platform". A second name here was one
+# nothing wrote to, so `log channel platform.module debug` turned up nothing at all.
 
 ## The platform this module wires in. Required.
 var platform: DotPlatformHub = null
