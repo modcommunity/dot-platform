@@ -30,9 +30,17 @@ const SCOPE_KEY := "user://seam_scope.key"
 
 const CHECKS := 62
 
+## Sections entered against sections that ran to their last line, and against this. A
+## runtime error inside a section aborts that function and nothing says so; a section that
+## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
+## total is the other half — see docs/testing.md.
+const SECTIONS := 7
+
 var _passed := 0
 var _failed := 0
 var _failures := PackedStringArray()
+var _entered := 0
+var _completed := 0
 
 var _keys: Dictionary = {}
 var _schema: DotAvatarSchema = null
@@ -72,6 +80,13 @@ func _run() -> void:
 	for line in _failures:
 		print("  FAIL  %s" % line)
 
+	print("%d of %d sections ran to their last line" % [_completed, _entered])
+	if _entered != SECTIONS or _completed != _entered:
+		print("ERROR: %d sections entered and %d completed, %d expected. One aborted or was skipped." % [
+			_entered, _completed, SECTIONS
+		])
+		get_tree().quit(1)
+		return
 	# The total the section counter cannot be. A runtime error inside a section aborts
 	# that function, and the counter is satisfied because the section had already
 	# announced itself. See docs/testing.md.
@@ -90,6 +105,16 @@ func _cleanup() -> void:
 	if FileAccess.file_exists(SCOPE_KEY):
 		DirAccess.open("user://").remove(SCOPE_KEY.get_file())
 	DotRegistry.clear()
+
+
+func _section(title: String) -> void:
+	_entered += 1
+	print(title)
+
+
+## A section reached its last line. See [constant SECTIONS].
+func _done() -> void:
+	_completed += 1
 
 
 func _check(condition: bool, what: String, detail: String = "") -> bool:
@@ -240,7 +265,7 @@ func _make_platform() -> DotPlatformHub:
 # --- The seams -------------------------------------------------------------
 
 func _test_identity_to_profile() -> void:
-	print("dot-auth to dot-user")
+	_section("dot-auth to dot-user")
 
 	var authenticated: DotResult = await _authenticate("acc-1", "Ada", SERVER_A)
 
@@ -288,10 +313,11 @@ func _test_identity_to_profile() -> void:
 	users.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
 
 
 func _test_profile_to_avatar() -> void:
-	print("dot-user to dot-user-avatar")
+	_section("dot-user to dot-user-avatar")
 
 	var authenticated: DotResult = await _authenticate("acc-2", "Grace", SERVER_A)
 	var users := _make_users("server:%s" % SERVER_A)
@@ -346,10 +372,11 @@ func _test_profile_to_avatar() -> void:
 	avatars.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
 
 
 func _test_scoping_across_servers() -> void:
-	print("scoping across servers")
+	_section("scoping across servers")
 
 	var on_a: DotResult = await _authenticate("acc-3", "Katherine", SERVER_A)
 	var on_b: DotResult = await _authenticate("acc-3", "Katherine", SERVER_B)
@@ -395,10 +422,11 @@ func _test_scoping_across_servers() -> void:
 	users_b.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
 
 
 func _test_full_admission() -> void:
-	print("full admission")
+	_section("full admission")
 
 	var users := _make_users("server:%s" % SERVER_A)
 	await users.setup()
@@ -463,10 +491,11 @@ func _test_full_admission() -> void:
 	avatars.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
 
 
 func _test_degraded_paths() -> void:
-	print("degraded paths")
+	_section("degraded paths")
 
 	var users := _make_users("server:%s" % SERVER_A)
 	await users.setup()
@@ -514,10 +543,11 @@ func _test_degraded_paths() -> void:
 	avatars.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
 
 
 func _test_absent_addons() -> void:
-	print("absent addons")
+	_section("absent addons")
 
 	# Nothing registered at all: the platform must still admit a player, or a game
 	# that only wanted authentication has been made to install everything.
@@ -573,10 +603,11 @@ func _test_absent_addons() -> void:
 	users.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
 
 
 func _test_wardrobe() -> void:
-	print("changing an avatar")
+	_section("changing an avatar")
 
 	var users := _make_users("server:%s" % SERVER_A)
 	await users.setup()
@@ -699,3 +730,4 @@ func _test_wardrobe() -> void:
 	avatars.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+	_done()
