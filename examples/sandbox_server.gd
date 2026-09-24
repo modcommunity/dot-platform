@@ -31,6 +31,18 @@ const AVATAR_DIR := "user://sandbox_avatars"
 const SCOPE_KEY := "user://sandbox_scope.key"
 const SERVER_DIR := "user://sandbox_server"
 
+## Sections entered against sections that ran to their last line, and against this. A
+## runtime error inside a section aborts that function and nothing says so; a section that
+## bailed out early after a failed guard is counted as not finished on purpose.
+const SECTIONS := 2
+
+## Every check this suite runs, including the two at the end that compare the counts. The
+## section counter cannot see a section that aborted after announcing itself — its remaining
+## checks simply never run — and a total can. See docs/testing.md.
+const CHECKS := 24
+
+var _entered := 0
+var _completed := 0
 var _passed := 0
 var _failed := 0
 var _failures := PackedStringArray()
@@ -62,6 +74,15 @@ func _run() -> void:
 	_cleanup()
 
 	print("")
+	# The two guards, as the last two checks. See docs/testing.md.
+	_check(
+		_completed == _entered and _entered == SECTIONS,
+		"every section ran to its last line (%d of %d)" % [_completed, SECTIONS]
+	)
+	_check(
+		_passed + _failed + 1 == CHECKS,
+		"every check ran (%d of %d)" % [_passed + _failed + 1, CHECKS]
+	)
 	print("%d passed, %d failed" % [_passed, _failed])
 
 	for line in _failures:
@@ -78,6 +99,16 @@ func _cleanup() -> void:
 		DirAccess.open("user://").remove(SCOPE_KEY.get_file())
 
 
+func _section(title: String) -> void:
+	_entered += 1
+	print(title)
+
+
+## A section reached its last line. See [constant SECTIONS].
+func _done() -> void:
+	_completed += 1
+
+
 func _check(condition: bool, what: String, detail: String = "") -> bool:
 	if condition:
 		_passed += 1
@@ -92,7 +123,7 @@ func _check(condition: bool, what: String, detail: String = "") -> bool:
 # --- Building both halves --------------------------------------------------
 
 func _build() -> bool:
-	print("bringing up the sandbox")
+	_section("bringing up the sandbox")
 
 	# The server half and the client half live under separate subtrees, each with its
 	# own MultiplayerAPI. Without this the second one to set multiplayer_peer wins and
@@ -230,6 +261,7 @@ func _build() -> bool:
 	_link.player_name = "Sandbox Visitor"
 	client_side.add_child(_link)
 
+	_done()
 	return true
 
 
@@ -255,7 +287,7 @@ func _build_schema() -> DotAvatarSchema:
 
 func _test_join() -> void:
 	print("")
-	print("a client connects")
+	_section("a client connects")
 
 	var spawned := [false]
 	var refused := [""]
@@ -356,6 +388,7 @@ func _test_join() -> void:
 		await get_tree().process_frame
 
 	_check(_hub.count() == 0, "the platform released them on disconnect")
+	_done()
 
 
 func _teardown() -> void:

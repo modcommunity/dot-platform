@@ -74,7 +74,7 @@ Both exit non-zero on failure.
 godot --headless --path . res://examples/seam_selftest.tscn      # 62 checks
 
 # A real server and a real client over a real socket, in one process.
-godot --headless --path . res://examples/sandbox_server.tscn     # 22 checks
+godot --headless --path . res://examples/sandbox_server.tscn     # 24 checks
 ```
 
 `sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink` over loopback and lets the whole signon run, through transport, challenge, credentials, authentication, content, load and spawn, with the platform resolving a profile and an avatar along the way. Nothing is called by hand.

@@ -127,7 +127,7 @@ find . -name '*.gd' -not -path './.godot/*' -not -path './addons/dot_*/*' | whil
 done
 
 godot --headless --path . res://examples/seam_selftest.tscn      # 62 checks
-godot --headless --path . res://examples/sandbox_server.tscn     # 22 checks
+godot --headless --path . res://examples/sandbox_server.tscn     # 24 checks
 ```
 
 Every other addon is symlinked in and gitignored; `addons/dot_platform/` is the only
