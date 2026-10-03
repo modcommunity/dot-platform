@@ -28,7 +28,7 @@ const PROFILE_DIR := "user://seam_profiles"
 const AVATAR_DIR := "user://seam_avatars"
 const SCOPE_KEY := "user://seam_scope.key"
 
-const CHECKS := 72
+const CHECKS := 73
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -779,7 +779,7 @@ func _test_game_identity() -> void:
 
 	var unknown := identity.avatar_for("u404")
 	_check(
-		unknown == stock and asked == [&"u404"],
+		unknown == stock and asked.has(&"u404"),
 		"a player the platform does not hold gets the game's stock avatar, by key",
 		str(asked)
 	)
@@ -792,6 +792,13 @@ func _test_game_identity() -> void:
 		_check(
 			identity.avatar_for(player.key()) == player.avatar and player.avatar != null,
 			"and is drawn in what the platform resolved for them, not the stock one"
+		)
+		# With nothing stored, what the platform resolves is the GAME's stock look for this
+		# player's scoped key — not the schema's one default, which is everybody alike.
+		_check(
+			player.avatar.digest() == stock.digest() and asked.has(StringName(player.key())),
+			"a first-time player is resolved to the game's stock look, by their scoped key",
+			str(asked)
 		)
 
 	identity.stock_avatar_fn = Callable()

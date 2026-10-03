@@ -126,7 +126,7 @@ find . -name '*.gd' -not -path './.godot/*' -not -path './addons/dot_*/*' | whil
     godot --headless --path . --check-only --script "res://${f#./}"
 done
 
-godot --headless --path . res://examples/seam_selftest.tscn      # 72 checks, 8 sections
+godot --headless --path . res://examples/seam_selftest.tscn      # 73 checks, 8 sections
 godot --headless --path . res://examples/sandbox_server.tscn     # 26 checks
 ```
 
@@ -167,6 +167,8 @@ sends nothing to a client itself, which keeps it out of the netcode's business.
 Every game built the same chain in front of this addon: dot-cloud (registered, or not built at all), the backbone client when the operator asked for one, dot-user, dot-user-avatar over the game's schema, and a hub — then `avatar_for(key)`, which falls back from what the platform resolved to a stock avatar. game-arena's copy was 262 lines and game-g2gfast's 215, and with the class names taken out they differed in one line. It lives here now, and a game hands it two things: `avatar_schema` and `stock_avatar_fn`. arena and g2gfast are twenty-line subclasses; mg-smash-copter and mg-buses-from-hell return one from dot-game's `_make_identity()`.
 
 It names `DotCloudClient`, `DotUserManager`, `DotAvatarManager` and `DotBackboneClient`, which the hub itself does not. That adds no dependency: `dot_platform_player.gd` already names types from dot-auth, dot-user and dot-user-avatar, so none of them was ever optional at parse time — only at run time, which is what "Everything optional stays optional" above is about and which the hub still honours.
+
+**And the stock look is the platform's answer too.** It hands `stock_avatar_fn` to the avatar manager as `default_avatar_fn`, so a first-time player admitted with nothing stored is resolved to the game's stock look for their scoped key rather than the schema's one default — which is what every admitted player in arena and g2gfast was wearing, identically, until 2026-10-03. The seam suite's "resolved to the game's stock look" checks it.
 
 **`avatar_for` is never null while there is a schema.** Platform first, then the game's stock function, then `default_avatar()`. A game with no schema builds no avatar manager and gets null, which is the honest answer for a game with no avatars.
 

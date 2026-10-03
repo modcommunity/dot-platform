@@ -197,6 +197,17 @@ func _build_avatars() -> DotResult:
 	avatars = DotAvatarManager.new()
 	avatars.name = "Avatars"
 	avatars.schema = avatar_schema
+	# [b]The game's stock look for somebody with nothing stored, not the schema's one
+	# document.[/b] Admission resolves a first-time player to the manager's default, and a
+	# game prefers the platform's answer to its own — so without this, everybody the
+	# platform had admitted was the same person, and the per-player variety a game draws
+	# lasted exactly until the profile arrived. Asked with the scoped key, so a player is
+	# the same person on every visit. Read at call time, so a game may set it late.
+	avatars.default_avatar_fn = func(user_key: String) -> DotAvatar:
+		if not stock_avatar_fn.is_valid():
+			return null
+		var stock: Variant = stock_avatar_fn.call(StringName(user_key))
+		return stock as DotAvatar if stock is DotAvatar else null
 	avatars.register_service = true
 	add_child(avatars)
 
