@@ -90,6 +90,19 @@ func _module_load() -> DotResult:
 		server.events.declare(
 			"player_avatar_changed", "A connected player's avatar changed; carries userid."
 		)
+		# [b]Admission finishes AFTER the game has seated somebody[/b] — see "The ordering
+		# limitation" in this addon's notes — so a game that read the name and avatar at
+		# seating read a guest's. This is the moment the real ones exist. Nothing announced
+		# it before, and a game had no way to know a player it had already drawn now had a
+		# profile; on a slow profile store, that was everybody.
+		server.events.declare(
+			"player_admitted",
+			"A connected player's profile and avatar are resolved; carries userid, peer_id."
+		)
+		server.events.declare(
+			"player_renamed",
+			"platform_name changed a connected player's name; carries userid, peer_id, name."
+		)
 	if not platform.avatar_changed.is_connected(_on_avatar_changed):
 		platform.avatar_changed.connect(_on_avatar_changed)
 
@@ -191,6 +204,11 @@ func _admit(session: DotClientSession) -> void:
 		"avatar": player.avatar.digest() if player.avatar != null else "-",
 	})
 
+	if server != null and server.events != null:
+		server.events.notify("player_admitted", {
+			"userid": session.userid, "peer_id": session.peer_id,
+		})
+
 
 func _on_client_disconnected(session: DotClientSession, _reason: String) -> void:
 	var key: String = _keys_by_userid.get(session.userid, "")
@@ -245,6 +263,19 @@ func _cmd_name(ctx: DotCmdContext) -> void:
 	if not renamed.ok:
 		ctx.reply("Refused: %s" % renamed.error.message)
 		return
+
+	# The profile changed and the session did not, so the game went on calling them by the
+	# old name: in chat, on the scoreboard, over their head. Applied here the way admission
+	# applies it, and announced, because only the game knows where it drew the name.
+	var session := server.session_by_userid(userid) if server != null else null
+
+	if session != null and platform.config.apply_profile_name:
+		session.display_name = str(renamed.value)
+
+		if server.events != null:
+			server.events.notify("player_renamed", {
+				"userid": userid, "peer_id": session.peer_id, "name": session.display_name,
+			})
 
 	ctx.reply("Renamed to '%s'." % renamed.value)
 

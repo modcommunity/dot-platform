@@ -127,7 +127,7 @@ find . -name '*.gd' -not -path './.godot/*' -not -path './addons/dot_*/*' | whil
 done
 
 godot --headless --path . res://examples/seam_selftest.tscn      # 72 checks, 8 sections
-godot --headless --path . res://examples/sandbox_server.tscn     # 24 checks
+godot --headless --path . res://examples/sandbox_server.tscn     # 26 checks
 ```
 
 Every other addon is symlinked in and gitignored; `addons/dot_platform/` is the only
@@ -159,6 +159,8 @@ read by nothing. It now does what it says, through the server rather than the wi
 module `hook_post`s it and redresses the player for everybody by whatever path it
 already has — game-g2gfast's bridge rebroadcasts the player's JOIN. dot-platform still
 sends nothing to a client itself, which keeps it out of the netcode's business.
+
+**`player_admitted` and `player_renamed` are the same seam for the other two moments.** Admission finishes after dot-server has spawned the player (see the ordering limitation above), so a game that read the name and avatar when it seated somebody read a guest's — and nothing told it when the real ones existed. The module now notifies `player_admitted` (`userid`, `peer_id`) once admission has applied the profile name, and a game hooks it to redraw exactly as it does for a wardrobe change. `platform_name` changed the profile and not the session, so the game went on using the old name; it sets `session.display_name` now and notifies `player_renamed` (`userid`, `peer_id`, `name`). `sandbox_server` checks both, and each fails with its line removed.
 
 ## A game's identity layer is `DotPlatformIdentity`
 

@@ -39,7 +39,7 @@ const SECTIONS := 2
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 24
+const CHECKS := 26
 
 var _entered := 0
 var _completed := 0
@@ -291,6 +291,13 @@ func _test_join() -> void:
 
 	var spawned := [false]
 	var refused := [""]
+	var admitted_events: Array[int] = []
+	var renamed_events: Array[String] = []
+
+	_server.events.hook_post("player_admitted", func(event: DotEvent) -> void:
+		admitted_events.append(event.get_int("userid")))
+	_server.events.hook_post("player_renamed", func(event: DotEvent) -> void:
+		renamed_events.append(str(event.data.get("name", ""))))
 
 	_link.spawned.connect(func() -> void: spawned[0] = true)
 	_link.disconnected.connect(func(reason: String) -> void: refused[0] = reason)
@@ -361,6 +368,30 @@ func _test_join() -> void:
 			sessions[0].display_name == player.display_name(),
 			"and applied the profile name to the session",
 			"%s vs %s" % [sessions[0].display_name, player.display_name()]
+		)
+		# The moment a game redraws a player it seated as a guest. Without it the name and
+		# avatar above exist and nothing on screen ever shows them.
+		_check(
+			admitted_events == [sessions[0].userid],
+			"and told the game, once, that this player is resolved",
+			str(admitted_events)
+		)
+
+		# The handler awaits the profile store, so the command returns before it lands.
+		var line := "platform_name %d Grace" % sessions[0].userid
+		var renamed: DotResult = _server.console.execute(
+			line, DotCmdContext.console("platform_name", PackedStringArray())
+		)
+		var rename_deadline := Time.get_ticks_msec() + 5000
+
+		while renamed_events.is_empty() and Time.get_ticks_msec() < rename_deadline:
+			await get_tree().process_frame
+
+		_check(
+			renamed.ok and sessions[0].display_name == "Grace"
+				and renamed_events == ["Grace"],
+			"an operator's rename reaches the session and is announced",
+			"%s, %s" % [sessions[0].display_name, str(renamed_events)]
 		)
 
 	# The console command, which is how an operator sees any of this.
