@@ -28,13 +28,13 @@ const PROFILE_DIR := "user://seam_profiles"
 const AVATAR_DIR := "user://seam_avatars"
 const SCOPE_KEY := "user://seam_scope.key"
 
-const CHECKS := 62
+const CHECKS := 72
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose. The CHECKS
 ## total is the other half — see docs/testing.md.
-const SECTIONS := 7
+const SECTIONS := 8
 
 var _passed := 0
 var _failed := 0
@@ -71,6 +71,7 @@ func _run() -> void:
 	await _test_degraded_paths()
 	await _test_absent_addons()
 	await _test_wardrobe()
+	await _test_game_identity()
 
 	_cleanup()
 
@@ -728,6 +729,92 @@ func _test_wardrobe() -> void:
 	hub.queue_free()
 	users.queue_free()
 	avatars.queue_free()
+	await get_tree().process_frame
+	DotRegistry.clear()
+	_done()
+
+
+## [DotPlatformIdentity]: the layer every game built for itself, built once.
+##
+## What a game relies on is the fallback order of [method DotPlatformIdentity.avatar_for]
+## — the platform's answer, then the game's stock avatar, then the schema's default — and
+## that the chain it builds is the one the hub finds through the registry. A layer that
+## built the managers without registering them would set up cleanly and admit everybody
+## with no profile and no avatar, which every other check here would also call success.
+func _test_game_identity() -> void:
+	_section("the shared identity layer")
+
+	var stock := _schema.default_avatar()
+	stock.set_part(&"hair", &"hair_free")
+	var asked: Array[StringName] = []
+
+	var identity := DotPlatformIdentity.new()
+	identity.avatar_schema = _schema
+	identity.stock_avatar_fn = func(key: StringName) -> DotAvatar:
+		asked.append(key)
+		return stock
+	add_child(identity)
+
+	var ready: DotResult = await identity.setup()
+
+	if not _check(ready.ok, "it builds the whole chain", str(ready.error)):
+		identity.queue_free()
+		return
+
+	_check(identity.cloud == null, "with no content sources, no cloud client")
+	_check(
+		identity.platform != null and identity.platform.users() == identity.users
+			and identity.platform.avatars() == identity.avatars,
+		"and the hub finds ITS profile and avatar managers through the registry"
+	)
+	_check(
+		identity.avatars != null and identity.avatars.schema == _schema,
+		"validating against the game's schema, not one of its own"
+	)
+	_check(
+		identity.platform_module().platform == identity.platform
+			and identity.platform_module() == identity.platform_module(),
+		"and hands out one platform module bound to that hub"
+	)
+
+	var unknown := identity.avatar_for("u404")
+	_check(
+		unknown == stock and asked == [&"u404"],
+		"a player the platform does not hold gets the game's stock avatar, by key",
+		str(asked)
+	)
+
+	var authenticated: DotResult = await _authenticate("acc-11", "Hedy", SERVER_A)
+	var admitted: DotResult = await identity.platform.admit(authenticated.value)
+
+	if _check(admitted.ok, "a player is admitted through it", str(admitted.error)):
+		var player: DotPlatformPlayer = admitted.value
+		_check(
+			identity.avatar_for(player.key()) == player.avatar and player.avatar != null,
+			"and is drawn in what the platform resolved for them, not the stock one"
+		)
+
+	identity.stock_avatar_fn = Callable()
+	var plain := identity.avatar_for("u405")
+	_check(
+		plain != null and plain.digest() == _schema.default_avatar().digest(),
+		"with no stock function, a stranger gets the schema's default — never null"
+	)
+
+	identity.queue_free()
+	await get_tree().process_frame
+	DotRegistry.clear()
+
+	# A game with no avatars at all: no manager, and null is the honest answer.
+	var bare := DotPlatformIdentity.new()
+	add_child(bare)
+	var bare_ready: DotResult = await bare.setup()
+	_check(
+		bare_ready.ok and bare.avatars == null and bare.avatar_for("u1") == null,
+		"no schema builds no avatar manager, and nobody has an avatar",
+		str(bare_ready.error)
+	)
+	bare.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
 	_done()

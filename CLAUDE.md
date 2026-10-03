@@ -126,7 +126,7 @@ find . -name '*.gd' -not -path './.godot/*' -not -path './addons/dot_*/*' | whil
     godot --headless --path . --check-only --script "res://${f#./}"
 done
 
-godot --headless --path . res://examples/seam_selftest.tscn      # 62 checks
+godot --headless --path . res://examples/seam_selftest.tscn      # 72 checks, 8 sections
 godot --headless --path . res://examples/sandbox_server.tscn     # 24 checks
 ```
 
@@ -159,6 +159,18 @@ read by nothing. It now does what it says, through the server rather than the wi
 module `hook_post`s it and redresses the player for everybody by whatever path it
 already has — game-g2gfast's bridge rebroadcasts the player's JOIN. dot-platform still
 sends nothing to a client itself, which keeps it out of the netcode's business.
+
+## A game's identity layer is `DotPlatformIdentity`
+
+Every game built the same chain in front of this addon: dot-cloud (registered, or not built at all), the backbone client when the operator asked for one, dot-user, dot-user-avatar over the game's schema, and a hub — then `avatar_for(key)`, which falls back from what the platform resolved to a stock avatar. game-arena's copy was 262 lines and game-g2gfast's 215, and with the class names taken out they differed in one line. It lives here now, and a game hands it two things: `avatar_schema` and `stock_avatar_fn`. arena and g2gfast are twenty-line subclasses; mg-smash-copter and mg-buses-from-hell return one from dot-game's `_make_identity()`.
+
+It names `DotCloudClient`, `DotUserManager`, `DotAvatarManager` and `DotBackboneClient`, which the hub itself does not. That adds no dependency: `dot_platform_player.gd` already names types from dot-auth, dot-user and dot-user-avatar, so none of them was ever optional at parse time — only at run time, which is what "Everything optional stays optional" above is about and which the hub still honours.
+
+**`avatar_for` is never null while there is a schema.** Platform first, then the game's stock function, then `default_avatar()`. A game with no schema builds no avatar manager and gets null, which is the honest answer for a game with no avatars.
+
+**`platform_module()` is a Node outside the tree until a server loads it.** One nothing loaded leaked with the hub it held — arena's copy had the leak, and the seam suite's "2 resources still in use" found it — so the layer frees an unparented module as it is deleted. One a server loaded is the server's.
+
+`seam_selftest`'s eighth section drives it with real managers and a real ticket; "drawn in what the platform resolved for them" fails with the platform lookup removed.
 
 ## Things deliberately not here
 
