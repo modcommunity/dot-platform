@@ -37,7 +37,9 @@ extends Node
 ## identity.stock_avatar_fn = MyAvatars.stock_avatar
 ## add_child(identity)
 ## await identity.setup()
-## server.modules.load_module(identity.platform_module())
+## # By PATH: DotModuleHost constructs the module itself, and finds the hub this
+## # registered. platform_module() is for a host that adds the node by hand.
+## await server.modules.load_module("res://addons/dot_platform/dot_platform_module.gd")
 ## [/codeblock]
 ##
 ## A dot-game module returns one from `_make_identity()` and needs none of the last line:
