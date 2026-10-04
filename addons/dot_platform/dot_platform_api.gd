@@ -9,6 +9,9 @@ extends RefCounted
 ## 2: [DotPlatformIdentity], which four games extend or build, and the `player_admitted`
 ## and `player_renamed` events. A pack that names the class on a host without it does not
 ## refuse; it fails to PARSE mid-load, which is what this file turns into a sentence.
+##
+## 3: [member DotPlatformIdentity.avatar_translate_fn] and `use_backbone_avatars` — a
+## game that sets the first on an older host is a script that does not compile.
 
-const LEVEL := 2
+const LEVEL := 3
 const OLDEST := 1

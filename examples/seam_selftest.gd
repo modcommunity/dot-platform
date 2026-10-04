@@ -28,7 +28,7 @@ const PROFILE_DIR := "user://seam_profiles"
 const AVATAR_DIR := "user://seam_avatars"
 const SCOPE_KEY := "user://seam_scope.key"
 
-const CHECKS := 73
+const CHECKS := 76
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -824,4 +824,51 @@ func _test_game_identity() -> void:
 	bare.queue_free()
 	await get_tree().process_frame
 	DotRegistry.clear()
+
+	# A host with an integration credential: avatars come from the SITE. Without this the
+	# manager's store was a local file, and every avatar a member chose on the site stayed
+	# there. A plain object with a config stands in for dot-auth's client, as the registry
+	# lookup is duck-typed on purpose.
+	var credential := DotAuthConfig.new()
+	credential.backbone_url = "https://site.example"
+	credential.integration_token = "tmci_test"
+	var fake_client := FakeBackboneHolder.new()
+	fake_client.config = credential
+	DotRegistry.register(&"dot_backbone_client", fake_client)
+
+	var sited := DotPlatformIdentity.new()
+	sited.avatar_schema = _schema
+	var translated_from: Array = []
+	sited.avatar_translate_fn = func(foreign: DotAvatar) -> DotAvatar:
+		translated_from.append(foreign.schema_id)
+		return _schema.default_avatar()
+	add_child(sited)
+	await sited.setup()
+	var site_store := sited.avatars.store as DotAvatarStoreBackbone if sited.avatars != null else null
+	_check(
+		site_store != null and site_store.base_url == "https://site.example/api/integration/v1"
+			and site_store.read_only,
+		"with the host's integration credential, avatars are read from the site, read only",
+		str(sited.avatars.store) if sited.avatars != null else "no manager"
+	)
+	var foreign := DotAvatar.make(&"builtin")
+	var as_ours: Variant = sited.avatars.translate_fn.call(foreign) if sited.avatars != null else null
+	_check(
+		as_ours is DotAvatar and translated_from == [&"builtin"],
+		"and a site avatar reaches the game's own translation"
+	)
+	sited.avatar_translate_fn = Callable()
+	_check(
+		sited.avatars != null and sited.avatars.translate_fn.call(foreign) == null,
+		"which, unset, leaves the member in the game's stock look"
+	)
+	sited.queue_free()
+	await get_tree().process_frame
+	DotRegistry.clear()
 	_done()
+
+
+## Stands in for dot-auth's DotBackboneClient in the registry: what the identity layer
+## reads is its config, and only that.
+class FakeBackboneHolder extends RefCounted:
+	var config: DotAuthConfig = null

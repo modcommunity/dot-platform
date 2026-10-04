@@ -185,3 +185,8 @@ It names `DotCloudClient`, `DotUserManager`, `DotAvatarManager` and `DotBackbone
 - **Matchmaking, discovery, a server browser.** Backend work, named as the largest
   real gap in `PLATFORM.md`.
 - **A PROFILE signon stage.** It belongs in dot-server; see above.
+
+## A member's site avatar reaches the game (2026-10-04)
+
+Until this date it reached none, for four independent reasons, and this addon held two of them. `DotPlatformIdentity` built its avatar manager over a LOCAL store, so nothing was ever read from the site; it now finds the host's `dot_backbone_client` in the registry and reads through the site's avatar route on that credential, read only (`use_backbone_avatars`, on). And the site's document is over its `builtin` schema, which every game's schema refuses; `avatar_translate_fn` is the game saying what those choices mean in its terms, passed to `DotAvatarManager.translate_fn`. The other two were dot-auth's (the key the site resolves; see its scoped introspection) and dot-server-deploy's (authentication off). `seam_selftest` checks the store and the translation and was armed. API level 3.
+

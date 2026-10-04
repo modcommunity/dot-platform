@@ -96,6 +96,25 @@ var avatar_schema: DotAvatarSchema = null
 ## player is the same on every machine and every visit.
 var stock_avatar_fn: Callable = Callable()
 
+## `func(site_avatar: DotAvatar) -> DotAvatar`: a member's site avatar, in this game's
+## schema. See [member DotAvatarManager.translate_fn].
+##
+## The site keeps one avatar per member over its own `builtin` schema; a game with a
+## schema of its own says here what those choices mean in its terms. Unset, a member's
+## site avatar is not drawn and they wear the game's stock look.
+var avatar_translate_fn: Callable = Callable()
+
+## Read avatars from the site when the server holds an integration credential.
+##
+## [b]On, and found rather than configured.[/b] A host that has registered a
+## `dot_backbone_client` (dot-server-deploy does, from data/listing.json) has the one
+## credential the site's avatar route accepts for this server, and the keys dot-auth's
+## scoped introspection hands dot-user are the ones that route resolves. Without it the
+## manager's store is a local file the site never sees, which is how every avatar a
+## member chose on the site stayed there. Read only: a server draws players and the site
+## is where they dress, and AVATAR_WRITE is a scope an operator should have to ask for.
+var use_backbone_avatars: bool = true
+
 var cloud: DotCloudClient = null
 var users: DotUserManager = null
 var avatars: DotAvatarManager = null
@@ -210,11 +229,47 @@ func _build_avatars() -> DotResult:
 			return null
 		var stock: Variant = stock_avatar_fn.call(StringName(user_key))
 		return stock as DotAvatar if stock is DotAvatar else null
+	avatars.translate_fn = func(foreign: DotAvatar) -> DotAvatar:
+		if not avatar_translate_fn.is_valid():
+			return null
+		var mine: Variant = avatar_translate_fn.call(foreign)
+		return mine as DotAvatar if mine is DotAvatar else null
+
+	if use_backbone_avatars:
+		var site_store := _backbone_avatar_store()
+
+		if site_store != null:
+			avatars.store = site_store
+
 	avatars.register_service = true
 	add_child(avatars)
 
 	var ready: DotResult = await avatars.setup()
 	return ready
+
+
+## The site's avatar store over the host's integration credential, or null.
+##
+## Duck-typed through the registry: the client is dot-auth's, and a host without one is
+## a LAN server whose avatars are its own.
+func _backbone_avatar_store() -> DotAvatarStoreBackbone:
+	var client: Object = DotRegistry.get_service(&"dot_backbone_client")
+	var cfg: Object = client.get("config") if client != null else null
+
+	if cfg == null or not cfg.has_method("integration_endpoint"):
+		return null
+
+	var token := str(cfg.get("integration_token")).strip_edges()
+
+	if token == "":
+		return null
+
+	var base := str(cfg.call("integration_endpoint", "")).trim_suffix("/")
+	var store := DotAvatarStoreBackbone.at(base, token)
+	store.read_only = true
+
+	DotLog.info(CHANNEL, "avatars are read from the site", {"url": base})
+	return store
 
 
 func _build_platform() -> DotResult:
