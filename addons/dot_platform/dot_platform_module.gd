@@ -146,6 +146,11 @@ func _on_client_state_changed(session: DotClientSession) -> void:
 	if session.identity == null:
 		return
 
+	# The hub belongs to whatever built it, and a game change may have freed it. Admitting
+	# through a freed hub crashed the server; a module left without one admits nobody.
+	if not is_instance_valid(platform):
+		return
+
 	if _admitting.has(session.userid) or _keys_by_userid.has(session.userid):
 		return
 

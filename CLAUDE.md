@@ -176,6 +176,10 @@ It names `DotCloudClient`, `DotUserManager`, `DotAvatarManager` and `DotBackbone
 
 `seam_selftest`'s eighth section drives it with real managers and a real ticket; "drawn in what the platform resolved for them" fails with the platform lookup removed.
 
+## A module whose hub was freed admits nobody (2026-10-08)
+
+`DotPlatformModule._on_client_state_changed` returns when `platform` is no longer a valid instance. The hub belongs to whatever built it (a game's `DotPlatformIdentity`), and a game change frees it; a module left loaded past that crashed the server on the next admission. dot-game now unloads the module it loaded, and this guard is what keeps any other host that forgets from crashing.
+
 ## Things deliberately not here
 
 - **A game.** The sandbox example spawns a player and stops. What they do next —
