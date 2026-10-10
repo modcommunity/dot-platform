@@ -79,7 +79,7 @@ godot --headless --path . res://examples/sandbox_server.tscn     # 24 checks
 
 `sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink` over loopback and lets the whole signon run, through transport, challenge, credentials, authentication, content, load and spawn, with the platform resolving a profile and an avatar along the way. Nothing is called by hand.
 
-It found two bugs in dot-server on its first run, both of which made a client unable to join at all. See `CLAUDE.md`.
+It found two bugs in dot-server on its first run, both of which made a client unable to join at all. See `docs/history.md`.
 
 ## Licence
 
