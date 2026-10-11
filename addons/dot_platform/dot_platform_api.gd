@@ -18,6 +18,12 @@ extends RefCounted
 ## `client_spawn`; a game's redraw handler finds nobody seated and does nothing, and the
 ## player is seated already resolved. Nothing a game called changed meaning, so OLDEST
 ## stays.
+##
+## 5: [member DotPlatformIdentity.use_backbone_profiles], [DotPlatformUsers] and
+## [DotPlatformProfileStore]. With the host's integration credential a site-issued
+## player's profile is read from and saved to the site; `users` is a [DotPlatformUsers],
+## which is still a [DotUserManager], so nothing a game called changed meaning and OLDEST
+## stays.
 
-const LEVEL := 4
+const LEVEL := 5
 const OLDEST := 1

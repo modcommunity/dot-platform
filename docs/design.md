@@ -57,7 +57,18 @@ Every game built the same chain in front of this addon: dot-cloud (registered, o
 - **The stock look is the platform's answer too.** It hands `stock_avatar_fn` to the avatar manager as `default_avatar_fn`, so a first-time player with nothing stored is resolved to the game's stock look for their scoped key rather than the schema's one default.
 - **`avatar_for` is never null while there is a schema.** Platform first, then the game's stock function, then `default_avatar()`. A game with no schema builds no avatar manager and gets null, which is the honest answer for a game with no avatars.
 - **`platform_module()` is a Node outside the tree until a server loads it.** One nothing loaded would leak with the hub it holds, so the layer frees an unparented module on `NOTIFICATION_PREDELETE`. One a server loaded is the server's.
+- **A site-issued player's profile is read from and written to the site** ([below](#a-site-issued-players-profile-lives-on-the-site)); `users` is a `DotPlatformUsers`, which is a `DotUserManager`.
 - **A member's site avatar is read from the site.** With `use_backbone_avatars` (on), the layer finds the host's `dot_backbone_client` in the registry and reads through the site's avatar route on that credential, read only. The site's document is over its `builtin` schema, which every game's schema refuses; `avatar_translate_fn` is the game saying what those choices mean in its terms, passed to `DotAvatarManager.translate_fn`.
+
+## A site-issued player's profile lives on the site
+
+With `use_backbone_profiles` (on) and a `dot_backbone_client` holding an integration token, `DotPlatformIdentity` builds dot-user's `DotUserStoreBackbone` on that credential, found exactly as the avatar store is, and hands it to the manager it builds (`DotPlatformUsers`). The manager's store is then a `DotPlatformProfileStore` that routes per key:
+
+- **Only a key the site issued goes to the site.** dot-auth's scoped introspection puts the site's key in the `scoped_key` claim, and `DotPlatformUsers.key_for` (the one place both the identity and the key are in hand, called before the read) marks it. A guest, a local account, or any key dot-user derived from this server's secret is a key the site never minted: the site would answer every read with 404 (a first-time player, every visit) and every save on leave with an ERROR. Those stay on this server's disk, as every profile did before.
+- **A credential the site refuses (401/403) falls back for the life of the process**, said once at WARN, rather than degrading every member to a session-only profile. A credential enrolled before `PROFILE_READ` / `PROFILE_WRITE` were granted is the case this is for. Any other failure passes through, and dot-user degrades that one player without overwriting the real profile.
+- **The router calls its inner stores' `_fetch` / `_store` / `_remove`**, not their public methods: its own public methods already checked the key, validated and stamped the profile, and a second pass logged a failed save twice.
+- **Where it follows a player is the credential's scope, not this addon's choice.** An app-bound credential scopes to the app, so every server holding it shares profiles; a server's own enrolled credential scopes to that server, so the profile survives restarts and reconnects there but another server sees a different key.
+- An operator who configured dot-user's `backbone` backend themselves is left alone; nothing is routed.
 
 ## A module whose hub was freed admits nobody
 

@@ -44,6 +44,8 @@ server.modules.load_module("res://addons/dot_platform/dot_platform_module.gd")
 
 It finds the hub through `DotRegistry`, admits every authenticated client, puts the result on `session.data["platform"]`, applies the profile's name, and releases the state when they leave. It adds `platform_status` and `platform_name` to the console.
 
+A game's `DotPlatformIdentity` builds the whole chain. When the server holds a site integration credential, a signed-in member's avatar is read from the site and their profile is kept there too, so it follows them to every server sharing that credential's scope; guests and local accounts keep their profile on the server's own disk.
+
 ## The translation it exists to do
 
 ```

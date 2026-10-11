@@ -18,7 +18,7 @@ done
 
 | Read | Before |
 | --- | --- |
-| [docs/design.md](docs/design.md) | anything: the one translation, what is optional, admission gating the spawn, the three events, the identity layer, two multiplayer APIs in one process, what is not here |
+| [docs/design.md](docs/design.md) | anything: the one translation, what is optional, admission gating the spawn, the three events, the identity layer, profiles on the site, two multiplayer APIs in one process, what is not here |
 | [docs/history.md](docs/history.md) | the join bugs, the class-name collision, and the avatar bugs |
 
 ## Layout
@@ -29,6 +29,8 @@ done
 | `addons/dot_platform/dot_platform_player.gd` | `DotPlatformPlayer`: one admitted player; `account_uid()` |
 | `addons/dot_platform/dot_platform_module.gd` | `DotPlatformModule`: the dot-server module; holds the PROFILE stage while admission runs, the late path, the three server events |
 | `addons/dot_platform/dot_platform_identity.gd` | `DotPlatformIdentity`: the identity layer a game subclasses or returns from dot-game's `_make_identity()` |
+| `addons/dot_platform/dot_platform_users.gd` | `DotPlatformUsers`: dot-user's manager, telling the profile store which keys the site issued |
+| `addons/dot_platform/dot_platform_profile_store.gd` | `DotPlatformProfileStore`: site-issued keys to the site's profile store, every other key to this server's disk |
 | `addons/dot_platform/dot_platform_config.gd` | `DotPlatformConfig` |
 | `addons/dot_platform/dot_platform_api.gd` | the API `LEVEL` and `OLDEST` a game checks |
 | `examples/seam_selftest.tscn` | every handoff, with real managers; one section per seam |
@@ -50,6 +52,8 @@ The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything
 - Admission can still finish after the spawn (the late path); a game redraws on `player_admitted`, `player_renamed` and `player_avatar_changed`. dot-platform sends nothing to a client. [design](docs/design.md#three-server-events-tell-the-game-when-to-redraw)
 - A suite of the hold needs a store that suspends; one that answers at once passes with the hold removed. [design](docs/design.md#admission-gates-the-spawn)
 - A game hands `DotPlatformIdentity` an `avatar_schema` and a `stock_avatar_fn`; `avatar_for` is never null while there is a schema. [design](docs/design.md#a-games-identity-layer-is-dotplatformidentity)
+- With the host's integration credential, only a key the site issued (the `scoped_key` claim) reaches the site's profile routes; a guest's or a locally derived key never does, or every read is a first-time player and every save an ERROR. A 401/403 falls back to the local store for the process. [design](docs/design.md#a-site-issued-players-profile-lives-on-the-site)
+- The seam suite's site checks run the real `DotHttp` against a loopback HTTP server (`MiniSite`); a faked client hid an orphan HTTP node for weeks. [history](docs/history.md#the-site-avatar-store-never-sent-a-request)
 - `DotPlatformModule` must keep returning when its hub is no longer valid. [design](docs/design.md#a-module-whose-hub-was-freed-admits-nobody)
 - Two multiplayer APIs in one tree: RPC routing is the node path under each root, so the client link is named `Server`. [design](docs/design.md#two-multiplayerapi-instances-in-one-process)
 - Check a new `class_name` against every addon in the family (`DotPlatform` is dot-core's). [history](docs/history.md#a-class-name-that-broke-dot-core)

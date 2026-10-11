@@ -7,7 +7,8 @@ extends Node
 ## [codeblock]
 ## dot-cloud    downloads and mounts content. Registers `dot_cloud_client`.
 ## dot-auth     reports this server to its site listing, when asked to.
-## dot-user     the profile that follows a player between servers.
+## dot-user     the profile that follows a player between servers (on the site, for a
+##              player the site issued a key for, when the host holds its credential).
 ## dot-avatar   what they look like, over the GAME's schema.
 ## dot-platform joins the three into ONE admission, as its own DotModule.
 ## [/codeblock]
@@ -115,6 +116,20 @@ var avatar_translate_fn: Callable = Callable()
 ## is where they dress, and AVATAR_WRITE is a scope an operator should have to ask for.
 var use_backbone_avatars: bool = true
 
+## Keep the profiles of players the site issued a key for on the site, when the server
+## holds an integration credential.
+##
+## [b]On, found the same way as the avatar store, and only for those players.[/b] With
+## it, a member's name, avatar choice and preferences follow them to every server whose
+## credential shares a scope (an app-bound credential: the app; a server's own enrolled
+## one: that server). Everybody else — guests, local accounts, any key dot-user derived
+## from this server's own secret — keeps a profile on this server's disk as before: the
+## site has never heard of their key, and sending it would make every read a first-time
+## player and every save on leave an ERROR. See [DotPlatformProfileStore]. Read and
+## written: the credential needs PROFILE_READ and PROFILE_WRITE, and a credential
+## without them is said once and falls back to this server's disk.
+var use_backbone_profiles: bool = true
+
 var cloud: DotCloudClient = null
 var users: DotUserManager = null
 var avatars: DotAvatarManager = null
@@ -201,7 +216,13 @@ func _build_backbone() -> DotResult:
 
 
 func _build_users() -> DotResult:
-	users = DotUserManager.new()
+	var managed := DotPlatformUsers.new()
+
+	if use_backbone_profiles:
+		# Before add_child: the manager's _ready builds its store.
+		managed.site_store = _backbone_profile_store()
+
+	users = managed
 	users.name = "Users"
 	users.register_service = true
 	add_child(users)
@@ -249,27 +270,52 @@ func _build_avatars() -> DotResult:
 
 
 ## The site's avatar store over the host's integration credential, or null.
+func _backbone_avatar_store() -> DotAvatarStoreBackbone:
+	var credential := _integration_credential()
+
+	if credential.is_empty():
+		return null
+
+	var store := DotAvatarStoreBackbone.at(credential[0], credential[1])
+	store.read_only = true
+
+	DotLog.info(CHANNEL, "avatars are read from the site", {"url": credential[0]})
+	return store
+
+
+## The site's profile store over the host's integration credential, or null.
+func _backbone_profile_store() -> DotUserStoreBackbone:
+	var credential := _integration_credential()
+
+	if credential.is_empty():
+		return null
+
+	var store := DotUserStoreBackbone.at(credential[0], credential[1])
+
+	DotLog.info(CHANNEL, "site-issued players' profiles live on the site", {
+		"url": credential[0]
+	})
+	return store
+
+
+## `[integration base URL, token]` from the host's `dot_backbone_client`, or empty.
 ##
 ## Duck-typed through the registry: the client is dot-auth's, and a host without one is
-## a LAN server whose avatars are its own.
-func _backbone_avatar_store() -> DotAvatarStoreBackbone:
+## a LAN server whose avatars and profiles are its own.
+func _integration_credential() -> PackedStringArray:
 	var client: Object = DotRegistry.get_service(&"dot_backbone_client")
 	var cfg: Object = client.get("config") if client != null else null
 
 	if cfg == null or not cfg.has_method("integration_endpoint"):
-		return null
+		return PackedStringArray()
 
 	var token := str(cfg.get("integration_token")).strip_edges()
 
 	if token == "":
-		return null
+		return PackedStringArray()
 
 	var base := str(cfg.call("integration_endpoint", "")).trim_suffix("/")
-	var store := DotAvatarStoreBackbone.at(base, token)
-	store.read_only = true
-
-	DotLog.info(CHANNEL, "avatars are read from the site", {"url": base})
-	return store
+	return PackedStringArray([base, token])
 
 
 func _build_platform() -> DotResult:
