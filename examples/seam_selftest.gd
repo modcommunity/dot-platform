@@ -28,7 +28,7 @@ const PROFILE_DIR := "user://seam_profiles"
 const AVATAR_DIR := "user://seam_avatars"
 const SCOPE_KEY := "user://seam_scope.key"
 
-const CHECKS := 76
+const CHECKS := 77
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -850,6 +850,12 @@ func _test_game_identity() -> void:
 			and site_store.read_only,
 		"with the host's integration credential, avatars are read from the site, read only",
 		str(sited.avatars.store) if sited.avatars != null else "no manager"
+	)
+	# The store's HTTP client has to be in the tree or no request leaves the process: it
+	# was an orphan once, and every member wore the game's stock look on every server.
+	_check(
+		site_store != null and site_store.http != null and site_store.http.is_inside_tree(),
+		"and the site store's HTTP client is in the tree, so a read reaches the network"
 	)
 	var foreign := DotAvatar.make(&"builtin")
 	var as_ours: Variant = sited.avatars.translate_fn.call(foreign) if sited.avatars != null else null
