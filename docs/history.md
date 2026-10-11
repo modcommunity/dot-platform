@@ -35,3 +35,8 @@ It reached none, for four independent reasons, and this addon held two: the iden
 ## A freed hub crashed the server
 
 A game change freed the hub while its module stayed loaded, and the next admission crashed the server. dot-game now unloads the module it loaded, and `_on_client_state_changed` checks the hub is still valid.
+
+## Admission after the spawn, and a refusal that was a script error
+
+Until dot-server had a `PROFILE` stage (2026-10-11), the module ran admission off `client_state_changed` and finished after dot-server had spawned the player: every player was seated as a guest and redrawn a moment later (which is why the three server events exist), and `require_avatar` could only act on somebody everyone had already seen join. It could not even do that: the refusal called `server.kick_session(...)`, which `DotServer` has never had. It parsed (the call is not checked against the script class), so the first refusal on a real server was `Invalid call. Nonexistent function 'kick_session'`, the admission coroutine died, and the refused player stayed in the game. Nothing ran a refusal through the module: `seam_selftest` calls the hub directly and `sandbox_server` only admitted. `sandbox_server` now refuses one player in the stage and one after it, and the second check fails with the old call put back.
+

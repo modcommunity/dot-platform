@@ -28,17 +28,23 @@ This is not politeness. A platform that required all three to start would be unu
 
 Optional here means at run time. `dot_platform_player.gd` names types from dot-auth, dot-user and dot-user-avatar, and `DotPlatformIdentity` also names `DotCloudClient`, `DotUserManager`, `DotAvatarManager` and `DotBackboneClient`, so at parse time those addons are required.
 
-## Admission runs after the spawn
+## Admission gates the spawn
 
-dot-server's signon runs `CONNECTING -> AUTHENTICATING -> DOWNLOADING -> LOADING -> SPAWNED`, and there is no cancellable stage between authentication and content. So `DotPlatformModule` runs admission off `DotServer.client_state_changed` and finishes shortly **after** dot-server has admitted the player, rather than gating it.
+dot-server's signon runs `CONNECTING -> AUTHENTICATING -> PROFILE -> DOWNLOADING -> LOADING -> SPAWNED`. `PROFILE` (dot-server API level 7) is the stage between authentication and content in which a module may hold a player and refuse them before anything has been sent that a refusal would have to take back: no content, no game, no spawn, no join line. `DotPlatformModule` holds every authenticated player there (`hold_profile(session, "platform")`) while `DotPlatformHub.admit` runs, then puts the platform state and the profile name on the session and releases them, so the game seats somebody who is already who they are. `require_avatar` and `require_profile` refuse in the stage with `refuse_profile` and the hub's sentence ("Make an avatar before joining."): the player reads it, the server never spawns them, and nobody saw them arrive.
 
-For a sandbox that is fine: a player briefly present with a default avatar is not a problem, and both dot-user and dot-user-avatar degrade to something usable. For `require_avatar` it is not enough. The fix is a `PROFILE` stage in dot-server's client session with its own timeout, for the reason the existing stages are separate: a player stuck choosing a hairstyle has a different problem from one stuck authenticating, and an operator has to be able to tell which. dot-server has no such stage yet; this module is structured so that it lands as a smaller file rather than a rewrite.
+- **The hold is taken synchronously, inside dot-server's own `client_state_changed` for the stage.** The server looks at the holds as soon as its handlers return; a hold taken after an await finds the player already downloading.
+- **A slow store does not keep an optional player out.** Unless `require_avatar` or `require_profile` is on, the module lets the player in after `admission_timeout_sec` (plus half a second) and admission finishes behind them, as it did before the stage. A required admission keeps holding, because letting the player in would be the very spawn the stage exists to prevent; dot-server's `profile_timeout_sec` (300 s) is the ceiling on that, for a player making an avatar as much as for a hung store. It is its own timeout for the reason the other stages have theirs: a player stuck choosing a hairstyle has a different problem from one stuck authenticating, and an operator has to be able to tell which.
+- **The old path stays, and it is the fallback, not dead code.** A session the module first hears of past the stage is admitted after the spawn, the way every session was before: a dot-server older than the stage (the module reaches `hold_profile` through `Object.call`, so this addon still parses against one), a session a host adopted, a guest who signed in after spawning. A refusal there is `DotServer.kick`. `gates_spawn()` says which kind of server the module is in.
+- **An unload lets everybody it holds in**, because a hold whose holder has gone is released by nothing and the player would wait out the stage's timeout.
+- **The client is not told.** It waits in its own `AUTHENTICATING` phase ("Signing in…"), which is why a client built before the stage joins unchanged. A game that wants to show its avatar editor during the stage sends its own optional envelope kind.
+
+`sandbox_server` checks both halves over a real socket, with an avatar store that answers a few frames late: a store that answers at once finishes admission inside the stage's announcement, and the suite then passes with the hold removed.
 
 ## Three server events tell the game when to redraw
 
-Because admission finishes after the spawn, a game that read the name and avatar when it seated somebody read a guest's. The module fires three server events, each carrying `userid` and `peer_id`, and a game `hook_post`s them and redraws by whatever path it already has (game-g2gfast's bridge rebroadcasts the player's JOIN):
+Admission usually finishes before the spawn now, but not always (the late path above, a slow store let in early, a rename, a wardrobe change), and a game that read the name and avatar when it seated somebody then read a guest's. The module fires three server events, each carrying `userid` and `peer_id`, and a game `hook_post`s them and redraws by whatever path it already has (game-g2gfast's bridge rebroadcasts the player's JOIN):
 
-- `player_admitted`, once admission has applied the profile name;
+- `player_admitted`, once admission has applied the profile name; gated, this fires before `client_spawn`, the game finds nobody seated to redraw, and seats them resolved;
 - `player_renamed` (plus `name`), after `session.display_name` is set;
 - `player_avatar_changed`, from the hub's `avatar_changed` when `DotPlatformConfig.broadcast_avatar_changes` is on.
 
@@ -68,4 +74,4 @@ Every game built the same chain in front of this addon: dot-cloud (registered, o
 - **A game.** The sandbox example spawns a player and stops. What they do next is a game, and dot-player-controller and dot-net are what it would be built on.
 - **The avatar editor UI.** dot-user-avatar's `choices_for` is what it would use.
 - **Matchmaking, discovery, a server browser.** dot-matchmaking and dot-browser.
-- **A `PROFILE` signon stage.** It belongs in dot-server; see above.
+- **The `PROFILE` signon stage itself.** It is dot-server's; this addon is one holder of it.

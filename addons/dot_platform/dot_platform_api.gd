@@ -12,6 +12,12 @@ extends RefCounted
 ##
 ## 3: [member DotPlatformIdentity.avatar_translate_fn] and `use_backbone_avatars` — a
 ## game that sets the first on an older host is a script that does not compile.
+##
+## 4: [method DotPlatformModule.gates_spawn]. On a dot-server with the PROFILE stage (its
+## level 7) admission finishes before the spawn, so `player_admitted` usually fires before
+## `client_spawn`; a game's redraw handler finds nobody seated and does nothing, and the
+## player is seated already resolved. Nothing a game called changed meaning, so OLDEST
+## stays.
 
-const LEVEL := 3
+const LEVEL := 4
 const OLDEST := 1

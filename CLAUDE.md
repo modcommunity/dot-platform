@@ -18,7 +18,7 @@ done
 
 | Read | Before |
 | --- | --- |
-| [docs/design.md](docs/design.md) | anything: the one translation, what is optional, admission after the spawn, the three events, the identity layer, two multiplayer APIs in one process, what is not here |
+| [docs/design.md](docs/design.md) | anything: the one translation, what is optional, admission gating the spawn, the three events, the identity layer, two multiplayer APIs in one process, what is not here |
 | [docs/history.md](docs/history.md) | the join bugs, the class-name collision, and the avatar bugs |
 
 ## Layout
@@ -27,7 +27,7 @@ done
 | --- | --- |
 | `addons/dot_platform/dot_platform.gd` | `DotPlatformHub`: the uid to scoped-key translation, admission |
 | `addons/dot_platform/dot_platform_player.gd` | `DotPlatformPlayer`: one admitted player; `account_uid()` |
-| `addons/dot_platform/dot_platform_module.gd` | `DotPlatformModule`: the dot-server module; admission off `client_state_changed`, the three server events |
+| `addons/dot_platform/dot_platform_module.gd` | `DotPlatformModule`: the dot-server module; holds the PROFILE stage while admission runs, the late path, the three server events |
 | `addons/dot_platform/dot_platform_identity.gd` | `DotPlatformIdentity`: the identity layer a game subclasses or returns from dot-game's `_make_identity()` |
 | `addons/dot_platform/dot_platform_config.gd` | `DotPlatformConfig` |
 | `addons/dot_platform/dot_platform_api.gd` | the API `LEVEL` and `OLDEST` a game checks |
@@ -45,16 +45,15 @@ The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything
 - Only `DotPlatformHub` translates `identity.uid` to the scoped `user_key`; the avatar is keyed on the scoped key, never the uid. [design](docs/design.md#the-one-translation)
 - Never store, log or send `account_uid()`. [design](docs/design.md#the-one-translation)
 - Managers come from `DotRegistry`; every absent addon has a defined answer, covered by the "absent addons" section. [design](docs/design.md#everything-optional-stays-optional)
-- Admission finishes after dot-server spawns the player; a game redraws on `player_admitted`, `player_renamed` and `player_avatar_changed`. dot-platform sends nothing to a client. [design](docs/design.md#three-server-events-tell-the-game-when-to-redraw)
+- The module holds dot-server's PROFILE stage while admission runs, taking the hold synchronously inside `client_state_changed`; a required admission refuses there (`refuse_profile`), an optional one is let in after `admission_timeout_sec`. [design](docs/design.md#admission-gates-the-spawn)
+- Reach dot-server's stage API through `has_method`/`call`, so the module still parses on a dot-server older than the stage and admits late there. [design](docs/design.md#admission-gates-the-spawn)
+- Admission can still finish after the spawn (the late path); a game redraws on `player_admitted`, `player_renamed` and `player_avatar_changed`. dot-platform sends nothing to a client. [design](docs/design.md#three-server-events-tell-the-game-when-to-redraw)
+- A suite of the hold needs a store that suspends; one that answers at once passes with the hold removed. [design](docs/design.md#admission-gates-the-spawn)
 - A game hands `DotPlatformIdentity` an `avatar_schema` and a `stock_avatar_fn`; `avatar_for` is never null while there is a schema. [design](docs/design.md#a-games-identity-layer-is-dotplatformidentity)
 - `DotPlatformModule` must keep returning when its hub is no longer valid. [design](docs/design.md#a-module-whose-hub-was-freed-admits-nobody)
 - Two multiplayer APIs in one tree: RPC routing is the node path under each root, so the client link is named `Server`. [design](docs/design.md#two-multiplayerapi-instances-in-one-process)
 - Check a new `class_name` against every addon in the family (`DotPlatform` is dot-core's). [history](docs/history.md#a-class-name-that-broke-dot-core)
 - Add a case to `seam_selftest` for any change to a handoff: it is the only test that runs more than one of these addons at once.
 - Raise `LEVEL` in `dot_platform_api.gd` for anything new a game could call. [dot_platform_api.gd](addons/dot_platform/dot_platform_api.gd)
-
-## Open items
-
-- **No `PROFILE` signon stage in dot-server**, so admission cannot gate a spawn and `require_avatar` cannot be enforced before the player appears. Not built yet. [design](docs/design.md#admission-runs-after-the-spawn)
 
 Deliberately not here: a game, the avatar editor UI, matchmaking and discovery. [design](docs/design.md#deliberately-not-here)

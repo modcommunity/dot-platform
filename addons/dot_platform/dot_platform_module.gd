@@ -16,19 +16,17 @@ extends DotModule
 ## server.modules.load_module(module)
 ## [/codeblock]
 ##
-## [b]The one thing this cannot do yet.[/b] dot-server's signon runs
-## CONNECTING to AUTHENTICATING to DOWNLOADING to LOADING to SPAWNED, and there is no
-## cancellable stage between authentication and content. So admission runs off
-## [signal DotServer.client_state_changed] and completes shortly [i]after[/i] the
-## player is admitted by dot-server rather than gating it.
+## [b]Admission gates the spawn.[/b] dot-server's signon has a PROFILE stage between
+## authentication and content (dot-server API level 7). The module holds every
+## authenticated player there while [method DotPlatformHub.admit] runs, so the player
+## appears already wearing their profile name and avatar, and a refusal
+## ([code]require_avatar[/code], [code]require_profile[/code]) is a refusal of somebody
+## nobody saw join rather than a kick.
 ##
-## For a sandbox that is fine — a player briefly present with a default avatar is not
-## a problem, and dot-user and dot-user-avatar both degrade to something usable. For
-## [code]require_avatar[/code] it is not enough, and the honest fix is a PROFILE
-## stage in [code]DotClientSession[/code] with its own timeout, exactly as the
-## existing stages have. That is a change to dot-server, it is written up in
-## [code]PLATFORM.md[/code], and this module is deliberately structured so it becomes
-## a smaller file rather than a rewrite when the stage lands.
+## [b]And the old path stays.[/b] A session announced past the stage (a server older than
+## it, a host that adopted the session, a guest who signed in after spawning) is admitted
+## the way it always was, after the spawn, and a refusal there is a kick. That is also what
+## a game's suite drives when it calls the state handler by hand.
 
 # No CHANNEL constant: this module logs -- admission, refusal, onboarding -- through
 # DotModule.log_info/log_warn, which write on "mod.platform". A second name here was one
@@ -46,6 +44,14 @@ var _keys_by_userid: Dictionary = {}
 
 ## Admissions in flight, so a client whose state changes twice is not admitted twice.
 var _admitting: Dictionary = {}
+
+## The name this module holds the PROFILE stage under. See [method DotServer.hold_profile].
+const HOLD := "platform"
+
+## dot-server session userid -> session, for every player this module is holding in the
+## PROFILE stage. Kept so an unload can let them go: a hold whose holder has gone is
+## released by nothing, and the player would sit there until the stage's timeout.
+var _holding: Dictionary = {}
 
 
 func _module_name() -> String:
@@ -90,11 +96,11 @@ func _module_load() -> DotResult:
 		server.events.declare(
 			"player_avatar_changed", "A connected player's avatar changed; carries userid."
 		)
-		# [b]Admission finishes AFTER the game has seated somebody[/b] — see "The ordering
-		# limitation" in this addon's notes — so a game that read the name and avatar at
-		# seating read a guest's. This is the moment the real ones exist. Nothing announced
-		# it before, and a game had no way to know a player it had already drawn now had a
-		# profile; on a slow profile store, that was everybody.
+		# The moment the real name and avatar exist. On a server with the PROFILE stage
+		# that is before the spawn and a game finds nobody to redraw; admission can still
+		# finish AFTER the game has seated somebody (an older server, a slow store let in
+		# early, an identity that changed), and then a game that read the name and avatar
+		# at seating read a guest's and has to redraw.
 		server.events.declare(
 			"player_admitted",
 			"A connected player's profile and avatar are resolved; carries userid, peer_id."
@@ -132,8 +138,14 @@ func _module_unload() -> void:
 		if server.client_disconnected.is_connected(_on_client_disconnected):
 			server.client_disconnected.disconnect(_on_client_disconnected)
 
+	# Let everybody we were holding in. Their admission is abandoned with the module, so
+	# they enter with what dot-server knows, the way they would on a server without one.
+	for userid in _holding.keys():
+		_release(_holding[userid])
+
 	_keys_by_userid.clear()
 	_admitting.clear()
+	_holding.clear()
 
 
 # --- The join --------------------------------------------------------------
@@ -141,9 +153,14 @@ func _module_unload() -> void:
 func _on_client_state_changed(session: DotClientSession) -> void:
 	# An identity means dot-server has finished authenticating. Every later state
 	# change also carries one, which is why the in-flight guard exists rather than
-	# matching on a specific state: the states a client passes through after
-	# authentication differ depending on whether the server has content to send.
+	# matching on a specific state: a session announced past the PROFILE stage (an older
+	# server, an adopted session, an identity that changed) is still admitted, late.
 	if session.identity == null:
+		return
+
+	# A refusal is announced too (REJECTED), with the identity still on it; admitting a
+	# session that is on its way out read the stores again for nobody.
+	if not session.is_active():
 		return
 
 	# The hub belongs to whatever built it, and a game change may have freed it. Admitting
@@ -155,15 +172,74 @@ func _on_client_state_changed(session: DotClientSession) -> void:
 		return
 
 	_admitting[session.userid] = true
-	_admit(session)
+
+	# Claimed now, synchronously, from inside dot-server's own announcement: the server
+	# looks at the holds as soon as its handlers return, and one taken after an await
+	# would find the player already downloading.
+	var gated := _hold(session)
+
+	_admit(session, gated)
+
+
+## Holds [param session] in dot-server's PROFILE stage. False when it is not in the stage
+## or the server has no such stage, which means admission runs after the spawn.
+##
+## [b]By name, through [method Object.call].[/b] `server.hold_profile(...)` would not
+## parse against a dot-server older than the stage, and this addon would then fail to load
+## on every server that has not been updated, rather than admitting late as it used to.
+func _hold(session: DotClientSession) -> bool:
+	if server == null or not server.has_method("hold_profile"):
+		return false
+	if not bool(server.call("hold_profile", session, HOLD)):
+		return false
+	_holding[session.userid] = session
+
+	# [b]A slow store must not keep a player out[/b] unless the configuration says what it
+	# is waiting for is required. Past the admission budget, an optional admission lets the
+	# player in and finishes behind them, as it did before the stage existed. A required
+	# one keeps holding: letting them in would be the very spawn the stage exists to
+	# prevent, and dot-server's own profile timeout is the ceiling.
+	if not _required():
+		var tree := Engine.get_main_loop() as SceneTree
+		if tree != null:
+			var budget := platform.config.admission_timeout_sec + 0.5
+			# A bound method, not a lambda: a connection to a method is dropped when this
+			# module is freed, and a lambda would run against a freed module after an unload.
+			tree.create_timer(budget).timeout.connect(_on_admission_budget.bind(session, budget))
+	return true
+
+
+func _on_admission_budget(session: DotClientSession, budget: float) -> void:
+	if _holding.get(session.userid) != session:
+		return
+	log_warn("admission is slow; letting the player in before it finishes", {
+		"user": session.label(), "seconds": budget,
+	})
+	_release(session)
+
+
+func _required() -> bool:
+	return platform != null and platform.config != null \
+		and (platform.config.require_avatar or platform.config.require_profile)
+
+
+## Ends this module's hold, if it still has one. The server sends the player on once
+## nobody else holds them.
+func _release(session: DotClientSession) -> void:
+	if _holding.get(session.userid) != session:
+		return
+	_holding.erase(session.userid)
+	if server != null and server.has_method("release_profile"):
+		server.call("release_profile", session, HOLD)
 
 
 ## Runs admission for one session.
 ##
 ## Not awaited by the caller: [signal DotServer.client_state_changed] is emitted from
 ## inside the server's own signon path, and suspending there would leave the server
-## mid-transition while a store is queried.
-func _admit(session: DotClientSession) -> void:
+## mid-transition while a store is queried. [param gated] says the session is held in
+## the PROFILE stage, so whatever happens here, it ends by releasing or refusing it.
+func _admit(session: DotClientSession, gated: bool) -> void:
 	var admitted: DotResult = await platform.admit(session.identity)
 
 	_admitting.erase(session.userid)
@@ -172,6 +248,7 @@ func _admit(session: DotClientSession) -> void:
 	# written to the session now would be written to a session the server has already
 	# torn down.
 	if not session.is_active():
+		_holding.erase(session.userid)
 		if admitted.ok:
 			platform.release((admitted.value as DotPlatformPlayer).key())
 		return
@@ -181,8 +258,18 @@ func _admit(session: DotClientSession) -> void:
 			"user": session.label(), "reason": str(admitted.error)
 		})
 
+		# Still held: refused before they appear, with the platform's sentence. Past the
+		# stage (late admission, or the hold was let go): the only answer left is a kick.
+		# This called `kick_session`, which DotServer has never had, so every late refusal
+		# was a script error and the player stayed in.
+		_holding.erase(session.userid)
 		if server != null:
-			server.kick_session(session, admitted.error.message)
+			var refused := (
+				server.has_method("refuse_profile")
+				and bool(server.call("refuse_profile", session, admitted.error.message, admitted.error))
+			)
+			if not refused:
+				server.kick(session, admitted.error.message)
 
 		return
 
@@ -207,6 +294,7 @@ func _admit(session: DotClientSession) -> void:
 		"user": session.label(),
 		"key": player.key(),
 		"avatar": player.avatar.digest() if player.avatar != null else "-",
+		"before_spawn": gated and _holding.has(session.userid),
 	})
 
 	if server != null and server.events != null:
@@ -214,11 +302,23 @@ func _admit(session: DotClientSession) -> void:
 			"userid": session.userid, "peer_id": session.peer_id,
 		})
 
+	# Last: the name and the platform state are on the session before dot-server moves the
+	# player on, so the game seats them as who they are rather than redrawing a guest.
+	_release(session)
+
+
+## Whether this module's admission runs before the spawn on the server it is loaded in,
+## that is, whether that dot-server has the PROFILE stage. A game that redraws on
+## `player_admitted` still has to: a late admission (see the class notes) fires it after.
+func gates_spawn() -> bool:
+	return server != null and server.has_method("hold_profile")
+
 
 func _on_client_disconnected(session: DotClientSession, _reason: String) -> void:
 	var key: String = _keys_by_userid.get(session.userid, "")
 
 	_admitting.erase(session.userid)
+	_holding.erase(session.userid)
 
 	if key == "":
 		return

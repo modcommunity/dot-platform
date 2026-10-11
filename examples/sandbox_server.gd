@@ -34,18 +34,30 @@ const SERVER_DIR := "user://sandbox_server"
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
 ## bailed out early after a failed guard is counted as not finished on purpose.
-const SECTIONS := 2
+const SECTIONS := 3
 
 ## Every check this suite runs, including the two at the end that compare the counts. The
 ## section counter cannot see a section that aborted after announcing itself — its remaining
 ## checks simply never run — and a total can. See docs/testing.md.
-const CHECKS := 26
+const CHECKS := 36
 
 var _entered := 0
 var _completed := 0
 var _passed := 0
 var _failed := 0
 var _failures := PackedStringArray()
+
+## An avatar store that answers a few frames late, as every real one does (a disk, the
+## site). [b]A store that answers at once makes the suite blind to the hold:[/b] admission
+## then finishes inside dot-server's own PROFILE announcement, before anything could have
+## moved the player on, so a module that held nothing would pass every check here.
+class SlowAvatarStore extends DotAvatarStoreMemory:
+	func _fetch(user_key: String) -> DotResult:
+		var tree := Engine.get_main_loop() as SceneTree
+		for i in 3:
+			await tree.process_frame
+		return super._fetch(user_key)
+
 
 var _server: DotServer = null
 var _link: DotClientLink = null
@@ -69,6 +81,7 @@ func _run() -> void:
 
 	if built:
 		await _test_join()
+		await _test_require_avatar_refuses_unseen()
 
 	_teardown()
 	_cleanup()
@@ -180,6 +193,7 @@ func _build() -> bool:
 	var avatars_ready: DotResult = await _avatars.setup()
 	if not _check(avatars_ready.ok, "avatars are up", str(avatars_ready.error)):
 		return false
+	_avatars.store = SlowAvatarStore.new()
 
 	_hub = DotPlatformHub.new()
 	_hub.register_service = true
@@ -294,8 +308,21 @@ func _test_join() -> void:
 	var admitted_events: Array[int] = []
 	var renamed_events: Array[String] = []
 
+	# What happened in what order, and what the server knew at the moment it seated them.
+	var order: Array[String] = []
+	var admitted_in: Array[String] = []
+	var at_spawn: Array = []
+	var module := _server.modules.get_module("platform") as DotPlatformModule
+
 	_server.events.hook_post("player_admitted", func(event: DotEvent) -> void:
+		order.append("admitted")
+		var at := _server.session_by_userid(event.get_int("userid"))
+		admitted_in.append(at.state_name() if at != null else "gone")
 		admitted_events.append(event.get_int("userid")))
+	var on_spawn := func(session: DotClientSession) -> void:
+		order.append("spawned")
+		at_spawn.append([module.player_for(session) != null, session.display_name])
+	_server.client_spawned.connect(on_spawn)
 	_server.events.hook_post("player_renamed", func(event: DotEvent) -> void:
 		renamed_events.append(str(event.data.get("name", ""))))
 
@@ -323,9 +350,40 @@ func _test_join() -> void:
 
 	_check(_server.sessions().size() == 1, "the server has one session open")
 
-	# Give the module's admission a moment: it runs off client_state_changed and
-	# completes shortly after spawn, which is the ordering limitation the module
-	# documents.
+	# [b]Admission gates the spawn.[/b] The module holds the player in dot-server's PROFILE
+	# stage until the platform has answered, so the server seats somebody who already has
+	# their profile name and avatar, and the game's redraw event comes first.
+	#
+	# The client's `spawned` is not the server's (it enters PLAYING after sending
+	# `game.loaded`), so wait for the server to have seated them.
+	var seated_deadline := Time.get_ticks_msec() + 5000
+	while order.find("spawned") < 0 and Time.get_ticks_msec() < seated_deadline:
+		await get_tree().process_frame
+	_server.client_spawned.disconnect(on_spawn)
+	_check(module.gates_spawn(), "this server has the PROFILE stage, so admission gates the spawn")
+	# Asked of the session as the platform announced it, not of a trail of
+	# client_state_changed: a hub that answers without suspending releases the hold inside
+	# the PROFILE announcement itself, so a handler connected after the module's never sees
+	# the session in that state.
+	_check(
+		admitted_in == ["PROFILE"],
+		"the platform finished admitting them while the server held them in PROFILE",
+		", ".join(admitted_in)
+	)
+	_check(
+		order.find("admitted") >= 0 and order.find("admitted") < order.find("spawned"),
+		"the platform admitted them before the server spawned them",
+		", ".join(order)
+	)
+	_check(
+		at_spawn.size() == 1 and bool(at_spawn[0][0])
+			and str(at_spawn[0][1]) == (_hub.players()[0].display_name() if _hub.count() == 1 else "?"),
+		"so they were seated wearing their platform state and profile name, not a guest's",
+		str(at_spawn)
+	)
+
+	# Already admitted by the time the client spawned; the wait is for an older server,
+	# where admission finishes after the spawn.
 	var admitted_deadline := Time.get_ticks_msec() + 5000
 
 	while _hub.count() == 0 and Time.get_ticks_msec() < admitted_deadline:
@@ -355,7 +413,6 @@ func _test_join() -> void:
 	)
 
 	# The module's own view of the same player.
-	var module := _server.modules.get_module("platform") as DotPlatformModule
 	var sessions := _server.sessions()
 
 	if sessions.size() == 1:
@@ -419,6 +476,81 @@ func _test_join() -> void:
 		await get_tree().process_frame
 
 	_check(_hub.count() == 0, "the platform released them on disconnect")
+	_done()
+
+
+## [b]require_avatar refuses before the player appears.[/b] A first-time player with no
+## avatar, on a server that requires one, is told so in the platform's words, and the
+## server never seats them: no spawn, no session left, nothing held by the platform.
+## Before the PROFILE stage this was a player who joined, was seen, and was then kicked.
+func _test_require_avatar_refuses_unseen() -> void:
+	print("")
+	_section("require_avatar refuses a player before they appear")
+
+	_hub.config.require_avatar = true
+
+	var client_side := Node.new()
+	client_side.name = "Newcomer"
+	add_child(client_side)
+	get_tree().set_multiplayer(MultiplayerAPI.create_default_interface(), client_side.get_path())
+
+	var link := DotClientLink.new()
+	link.name = "Server"
+	link.player_name = "Newcomer"
+	client_side.add_child(link)
+
+	var spawned := [false]
+	var refused := [""]
+	var seated: Array[String] = []
+	var on_spawn := func(session: DotClientSession) -> void:
+		seated.append(session.display_name)
+	_server.client_spawned.connect(on_spawn)
+	link.spawned.connect(func() -> void: spawned[0] = true)
+	link.disconnected.connect(func(reason: String) -> void: refused[0] = reason)
+
+	var connecting: DotResult = await link.connect_to_server("127.0.0.1:%d" % PORT)
+	_check(connecting.ok, "a first-time player connects", str(connecting.error))
+
+	var deadline := Time.get_ticks_msec() + 10000
+	while not spawned[0] and refused[0] == "" and Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+
+	_check(
+		refused[0] == "Make an avatar before joining.",
+		"and is refused in the platform's words",
+		refused[0] if refused[0] != "" else "spawned" if spawned[0] else "nothing at all"
+	)
+	_check(
+		not spawned[0] and seated.is_empty(),
+		"without ever spawning, on either end",
+		str(seated)
+	)
+	_check(_server.sessions().is_empty(), "the server keeps no session for them")
+	_check(_hub.count() == 0, "and the platform holds nothing for them")
+
+	# Past the stage the only refusal left is a kick: a session the module first hears of
+	# already in the game (a host that adopted it, an older server). That path called a
+	# DotServer method that never existed, so the player was left in with a script error.
+	var late := DotClientSession.new()
+	late.peer_id = 9191
+	late.display_name = "Late"
+	late.state = DotClientSession.State.SPAWNED
+	late.identity = DotAuthIdentity.guest("device-late", "Late")
+	var _adopted := _server.adopt_session(late)
+	var kicked_deadline := Time.get_ticks_msec() + 5000
+	while late.is_active() and Time.get_ticks_msec() < kicked_deadline:
+		await get_tree().process_frame
+	_check(
+		not late.is_active() and _server.session_by_userid(late.userid) == null,
+		"a player refused after the stage, where nothing could hold them, is kicked",
+		late.state_name()
+	)
+
+	_server.client_spawned.disconnect(on_spawn)
+	_hub.config.require_avatar = false
+	link.disconnect_from_server("done")
+	client_side.queue_free()
+	await get_tree().process_frame
 	_done()
 
 
