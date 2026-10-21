@@ -38,7 +38,7 @@ done
 
 ## Running and testing
 
-The family's two steps ([game-dev/CLAUDE.md](../../CLAUDE.md#validating-anything)), parsing only this repository's scripts (`-not -path './addons/dot_*/*'` on the `find`), then `res://examples/seam_selftest.tscn` and `res://examples/sandbox_server.tscn`.
+The family's two steps ([family CLAUDE.md](../../CLAUDE.md#validating-anything)), parsing only this repository's scripts (a plain `find` does not follow the symlinked addons, so no filter: a `-not -path './addons/dot_*/*'` would skip `addons/dot_platform/` too), then `res://examples/seam_selftest.tscn` and `res://examples/sandbox_server.tscn`.
 
 `sandbox_server` binds a real port (27077): a failure there is as likely to be the environment as the code. It fails rather than hangs, with the client's phase in the message.
 

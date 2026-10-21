@@ -73,10 +73,10 @@ Both exit non-zero on failure.
 
 ```bash
 # All four addons in one process: real RSA keys, a real ticket, real stores.
-godot --headless --path . res://examples/seam_selftest.tscn      # 62 checks
+godot --headless --path . res://examples/seam_selftest.tscn      # 90 checks
 
 # A real server and a real client over a real socket, in one process.
-godot --headless --path . res://examples/sandbox_server.tscn     # 24 checks
+godot --headless --path . res://examples/sandbox_server.tscn     # 36 checks
 ```
 
 `sandbox_server` boots a `DotServer`, loads the module, connects a `DotClientLink` over loopback and lets the whole signon run, through transport, challenge, credentials, authentication, content, load and spawn, with the platform resolving a profile and an avatar along the way. Nothing is called by hand.
