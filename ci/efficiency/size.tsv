@@ -1,0 +1,8 @@
+# size
+# Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
+examples/sandbox_server.gd::_build	142
+examples/sandbox_server.gd::_test_join	184
+examples/seam_selftest.gd	1179
+examples/seam_selftest.gd::_test_game_identity	131
+examples/seam_selftest.gd::_test_site_profiles	175
+examples/seam_selftest.gd::_test_wardrobe	134

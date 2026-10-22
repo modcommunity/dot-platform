@@ -1,0 +1,18 @@
+# comments
+# Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
+addons/dot_platform/dot_platform.gd::banner	5
+addons/dot_platform/dot_platform.gd::long_block	7
+addons/dot_platform/dot_platform_api.gd::long_block	1
+addons/dot_platform/dot_platform_config.gd::long_block	6
+addons/dot_platform/dot_platform_identity.gd::long_block	15
+addons/dot_platform/dot_platform_module.gd::banner	3
+addons/dot_platform/dot_platform_module.gd::history	1
+addons/dot_platform/dot_platform_module.gd::long_block	8
+addons/dot_platform/dot_platform_player.gd::long_block	6
+addons/dot_platform/dot_platform_plugin.gd::long_block	1
+addons/dot_platform/dot_platform_profile_store.gd::long_block	3
+addons/dot_platform/dot_platform_users.gd::long_block	2
+examples/sandbox_server.gd::banner	2
+examples/sandbox_server.gd::long_block	6
+examples/seam_selftest.gd::banner	2
+examples/seam_selftest.gd::long_block	6

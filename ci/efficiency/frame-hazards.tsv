@@ -1,0 +1,5 @@
+# frame-hazards
+# Baselines only shrink: scripts/<gate> --update lowers or drops entries and refuses to add.
+examples/seam_selftest.gd::_answer::alloc_dict	1
+examples/seam_selftest.gd::_answer::string_build	1
+examples/seam_selftest.gd::_process::duplicate	1
