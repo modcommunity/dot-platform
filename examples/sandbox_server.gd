@@ -133,14 +133,11 @@ func _check(condition: bool, what: String, detail: String = "") -> bool:
 	return condition
 
 
-# --- Building both halves --------------------------------------------------
-
 func _build() -> bool:
 	_section("bringing up the sandbox")
 
-	# The server half and the client half live under separate subtrees, each with its
-	# own MultiplayerAPI. Without this the second one to set multiplayer_peer wins and
-	# the first silently stops receiving anything.
+	# Separate subtrees, each with its own MultiplayerAPI: otherwise the second
+	# multiplayer_peer set wins and the first silently receives nothing.
 	var server_side := Node.new()
 	server_side.name = "ServerSide"
 	add_child(server_side)
@@ -158,7 +155,25 @@ func _build() -> bool:
 		"the two halves have separate MultiplayerAPI instances"
 	)
 
-	# --- platform services (shared; they are not networked) ---
+	if not await _build_services():
+		return false
+	if not await _build_server(server_side):
+		return false
+
+	# Named "Server" on purpose: an RPC is addressed by node path relative to the
+	# MultiplayerAPI root, so the client node must sit where DotServer sits or every RPC
+	# fails with "Node not found: Server".
+	_link = DotClientLink.new()
+	_link.name = "Server"
+	_link.player_name = "Sandbox Visitor"
+	client_side.add_child(_link)
+
+	_done()
+	return true
+
+
+## Platform services, shared by both halves; they are not networked.
+func _build_services() -> bool:
 	_users = DotUserManager.new()
 	_users.register_service = true
 	_users.load_layered_config = false
@@ -206,7 +221,11 @@ func _build() -> bool:
 	if not _check(hub_ready.ok, "the platform is up", str(hub_ready.error)):
 		return false
 
-	# --- authentication: guests, so no backbone is involved ---
+	return true
+
+
+## Guest authentication (no backbone), the server and the platform module.
+func _build_server(server_side: Node) -> bool:
 	var auth_config := DotAuthConfig.new()
 	auth_config.strategy = DotAuthConfig.Strategy.ANONYMOUS
 	auth_config.allow_guests = true
@@ -218,7 +237,6 @@ func _build() -> bool:
 	auth.register_service = true
 	server_side.add_child(auth)
 
-	# --- the server ---
 	var config := DotServerConfig.new()
 	config.hostname = "sandbox"
 	config.port = PORT
@@ -243,8 +261,7 @@ func _build() -> bool:
 	if not _check(booted.ok, "the server boots and listens", str(booted.error)):
 		return false
 
-	# The module finds the hub through DotRegistry, which is why load_module taking a
-	# path rather than an instance is not a problem.
+	# The module finds the hub through DotRegistry, so a path rather than an instance is fine.
 	var loaded: DotResult = await _server.modules.load_module(
 		"res://addons/dot_platform/dot_platform_module.gd"
 	)
@@ -257,25 +274,6 @@ func _build() -> bool:
 		"and is listed among the server's modules"
 	)
 
-	# --- the client ---
-	_link = DotClientLink.new()
-	# Named "Server", which looks wrong and is not.
-	#
-	# Godot addresses an RPC by the receiver's node path relative to its
-	# MultiplayerAPI root, so a call from the server's node at ServerSide/Server
-	# arrives addressed to "Server" and is looked up under the client's root. Give the
-	# client's node any other name and every RPC fails with "Node not found: Server",
-	# which is what the first version of this file did.
-	#
-	# So DotClientLink must sit at the same relative path as DotServer. In a normal
-	# two-process deployment that is invisible — both are just "the game node" — and
-	# in one process it is the whole difference between a working handshake and a
-	# client that connects, says nothing, and times out.
-	_link.name = "Server"
-	_link.player_name = "Sandbox Visitor"
-	client_side.add_child(_link)
-
-	_done()
 	return true
 
 
@@ -296,8 +294,6 @@ func _build_schema() -> DotAvatarSchema:
 	schema.invalidate()
 	return schema
 
-
-# --- The join ---------------------------------------------------------------
 
 func _test_join() -> void:
 	print("")
@@ -350,21 +346,65 @@ func _test_join() -> void:
 
 	_check(_server.sessions().size() == 1, "the server has one session open")
 
-	# [b]Admission gates the spawn.[/b] The module holds the player in dot-server's PROFILE
-	# stage until the platform has answered, so the server seats somebody who already has
-	# their profile name and avatar, and the game's redraw event comes first.
-	#
-	# The client's `spawned` is not the server's (it enters PLAYING after sending
-	# `game.loaded`), so wait for the server to have seated them.
+	# Admission gates the spawn: the module holds the player in PROFILE until the platform
+	# answers. The client's `spawned` is not the server's, so wait for the server to seat them.
 	var seated_deadline := Time.get_ticks_msec() + 5000
 	while order.find("spawned") < 0 and Time.get_ticks_msec() < seated_deadline:
 		await get_tree().process_frame
 	_server.client_spawned.disconnect(on_spawn)
+	_join_gate_checks(module, order, admitted_in, at_spawn)
+
+	# Already admitted by the time the client spawned; the wait is for an older server,
+	# where admission finishes after the spawn.
+	var admitted_deadline := Time.get_ticks_msec() + 5000
+
+	while _hub.count() == 0 and Time.get_ticks_msec() < admitted_deadline:
+		await get_tree().process_frame
+
+	if not _check(_hub.count() == 1, "the platform admitted them"):
+		return
+
+	var player: DotPlatformPlayer = _hub.players()[0]
+	_join_player_checks(player)
+	await _join_module_view(module, player, admitted_events, renamed_events)
+
+	await _join_status_and_leave()
+
+
+func _join_status_and_leave() -> void:
+	# The console command, which is how an operator sees any of this.
+	var status: DotResult = _server.console.execute(
+		"platform_status",
+		DotCmdContext.console("platform_status", PackedStringArray())
+	)
+	_check(status.ok, "platform_status runs", str(status.error) if not status.ok else "")
+
+	print("")
+	print("  --- the server's view ---")
+	for line in _hub.describe_lines():
+		print("  %s" % line)
+
+	# Leaving releases the platform state, or a busy server accumulates every player.
+	print("")
+	print("the client leaves")
+
+	_link.disconnect_from_server("done")
+
+	var release_deadline := Time.get_ticks_msec() + 5000
+
+	while _hub.count() > 0 and Time.get_ticks_msec() < release_deadline:
+		await get_tree().process_frame
+
+	_check(_hub.count() == 0, "the platform released them on disconnect")
+	_done()
+
+
+func _join_gate_checks(
+	module: DotPlatformModule, order: Array[String], admitted_in: Array[String], at_spawn: Array
+) -> void:
 	_check(module.gates_spawn(), "this server has the PROFILE stage, so admission gates the spawn")
-	# Asked of the session as the platform announced it, not of a trail of
-	# client_state_changed: a hub that answers without suspending releases the hold inside
-	# the PROFILE announcement itself, so a handler connected after the module's never sees
-	# the session in that state.
+	# Asked as the platform announced it, not via client_state_changed: a hub that answers
+	# without suspending releases the hold inside the PROFILE announcement itself.
 	_check(
 		admitted_in == ["PROFILE"],
 		"the platform finished admitting them while the server held them in PROFILE",
@@ -382,18 +422,8 @@ func _test_join() -> void:
 		str(at_spawn)
 	)
 
-	# Already admitted by the time the client spawned; the wait is for an older server,
-	# where admission finishes after the spawn.
-	var admitted_deadline := Time.get_ticks_msec() + 5000
 
-	while _hub.count() == 0 and Time.get_ticks_msec() < admitted_deadline:
-		await get_tree().process_frame
-
-	if not _check(_hub.count() == 1, "the platform admitted them"):
-		return
-
-	var player: DotPlatformPlayer = _hub.players()[0]
-
+func _join_player_checks(player: DotPlatformPlayer) -> void:
 	_check(player.is_ready(), "and they reached READY", player.stage_name())
 	_check(player.is_guest(), "as a guest, since this server has no accounts")
 	_check(player.profile != null, "with a profile")
@@ -412,7 +442,13 @@ func _test_join() -> void:
 		"which does not contain the identity the server authenticated"
 	)
 
-	# The module's own view of the same player.
+
+
+## The module's own view of the same player.
+func _join_module_view(
+	module: DotPlatformModule, player: DotPlatformPlayer,
+	admitted_events: Array[int], renamed_events: Array[String]
+) -> void:
 	var sessions := _server.sessions()
 
 	if sessions.size() == 1:
@@ -451,38 +487,9 @@ func _test_join() -> void:
 			"%s, %s" % [sessions[0].display_name, str(renamed_events)]
 		)
 
-	# The console command, which is how an operator sees any of this.
-	var status: DotResult = _server.console.execute(
-		"platform_status",
-		DotCmdContext.console("platform_status", PackedStringArray())
-	)
-	_check(status.ok, "platform_status runs", str(status.error) if not status.ok else "")
 
-	print("")
-	print("  --- the server's view ---")
-	for line in _hub.describe_lines():
-		print("  %s" % line)
-
-	# Leaving releases the platform state, or a busy server accumulates every player
-	# who has ever connected.
-	print("")
-	print("the client leaves")
-
-	_link.disconnect_from_server("done")
-
-	var release_deadline := Time.get_ticks_msec() + 5000
-
-	while _hub.count() > 0 and Time.get_ticks_msec() < release_deadline:
-		await get_tree().process_frame
-
-	_check(_hub.count() == 0, "the platform released them on disconnect")
-	_done()
-
-
-## [b]require_avatar refuses before the player appears.[/b] A first-time player with no
-## avatar, on a server that requires one, is told so in the platform's words, and the
-## server never seats them: no spawn, no session left, nothing held by the platform.
-## Before the PROFILE stage this was a player who joined, was seen, and was then kicked.
+## A first-time player with no avatar on a require_avatar server is refused before they
+## appear: no spawn, no session left, nothing held by the platform.
 func _test_require_avatar_refuses_unseen() -> void:
 	print("")
 	_section("require_avatar refuses a player before they appear")

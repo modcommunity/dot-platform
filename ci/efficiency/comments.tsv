@@ -12,7 +12,5 @@ addons/dot_platform/dot_platform_player.gd::long_block	6
 addons/dot_platform/dot_platform_plugin.gd::long_block	1
 addons/dot_platform/dot_platform_profile_store.gd::long_block	3
 addons/dot_platform/dot_platform_users.gd::long_block	2
-examples/sandbox_server.gd::banner	2
-examples/sandbox_server.gd::long_block	6
-examples/seam_selftest.gd::banner	2
-examples/seam_selftest.gd::long_block	6
+examples/sandbox_server.gd::long_block	2
+examples/seam_selftest.gd::long_block	1
