@@ -98,10 +98,8 @@ func _identity(account: String, name: String) -> DotAuthIdentity:
 	return identity
 
 
-## Mints a real ticket and verifies it through a real DotAuthServer.
-##
-## Not a shortcut around dot-auth: this is the path a connecting player takes, and
-## the identity that comes out is the one the rest of the platform receives.
+## Mints a real ticket and verifies it through a real DotAuthServer, the path a connecting
+## player takes; the identity that comes out is what the platform receives.
 func _authenticate(
 	account: String,
 	name: String,
