@@ -4,7 +4,7 @@ extends "res://examples/seam_selftest_base.gd"
 ## mocked, and checks the handoffs: a game server must never see an account id, only its
 ## scoped derivation, and the avatar is filed under that. Run: `res://examples/seam_selftest.tscn`.
 
-const CHECKS := 90
+const CHECKS := 91
 
 ## Sections entered against sections that ran to their last line, and against this. A
 ## runtime error inside a section aborts that function and nothing says so; a section that
@@ -327,6 +327,18 @@ func _identity_variants() -> void:
 		as_ours is DotAvatar and translated_from == [&"builtin"],
 		"and a site avatar reaches the game's own translation"
 	)
+	# An enrolled server already has the host's client: the identity must use it, not build a token-less second one.
+	var reporting := DotPlatformIdentity.new()
+	reporting.report_to_backbone = true
+	add_child(reporting)
+	var reported: DotResult = await reporting._build_backbone()
+	_check(
+		reported.ok and reporting.backbone == null
+			and DotRegistry.get_service(&"dot_backbone_client") == fake_client,
+		"with the host's backbone client registered, the identity builds none of its own and still succeeds",
+		str(reported.error)
+	)
+	reporting.queue_free()
 	sited.avatar_translate_fn = Callable()
 	_check(
 		sited.avatars != null and sited.avatars.translate_fn.call(foreign) == null,

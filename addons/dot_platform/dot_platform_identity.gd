@@ -200,6 +200,15 @@ func _build_cloud() -> DotResult:
 
 
 func _build_backbone() -> DotResult:
+	# The host's client, when it has one (dot-server-deploy builds it from data/listing.json), is the
+	# server's credential. A second client here is built from a bare DotAuthConfig with no token, so it
+	# fails with "No integration token" at ERROR on every boot of an enrolled server and reports nothing.
+	var host_client: Object = DotRegistry.get_service(&"dot_backbone_client")
+
+	if host_client != null:
+		DotLog.info(CHANNEL, "the host's backbone client is used", {})
+		return DotResult.success(null)
+
 	var config := DotAuthConfig.new()
 
 	if backbone_url != "":
