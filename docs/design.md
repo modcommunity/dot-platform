@@ -42,7 +42,7 @@ dot-server's signon runs `CONNECTING -> AUTHENTICATING -> PROFILE -> DOWNLOADING
 
 ## Three server events tell the game when to redraw
 
-Admission usually finishes before the spawn now, but not always (the late path above, a slow store let in early, a rename, a wardrobe change), and a game that read the name and avatar when it seated somebody then read a guest's. The module fires three server events, each carrying `userid` and `peer_id`, and a game `hook_post`s them and redraws by whatever path it already has (game-g2gfast's bridge rebroadcasts the player's JOIN):
+Admission usually finishes before the spawn now, but not always (the late path above, a slow store let in early, a rename, a wardrobe change), and a game that read the name and avatar when it seated somebody then read a guest's. The module fires three server events, each carrying `userid` and `peer_id`, and a game `hook_post`s them and redraws by whatever path it already has (game-airdrift's bridge rebroadcasts the player's JOIN):
 
 - `player_admitted`, once admission has applied the profile name; gated, this fires before `client_spawn`, the game finds nobody seated to redraw, and seats them resolved;
 - `player_renamed` (plus `name`), after `session.display_name` is set;
@@ -52,7 +52,7 @@ dot-platform sends nothing to a client itself, which keeps it out of the netcode
 
 ## A game's identity layer is `DotPlatformIdentity`
 
-Every game built the same chain in front of this addon: dot-cloud (registered, or not built at all), the backbone client when the operator asked for one, dot-user, dot-user-avatar over the game's schema, and a hub, then `avatar_for(key)`. Two games' copies differed in one line once the class names were taken out. It lives here, and a game hands it two things: `avatar_schema` and `stock_avatar_fn`. game-arena and game-g2gfast subclass it; the games on dot-game return one from `_make_identity()`.
+Every game built the same chain in front of this addon: dot-cloud (registered, or not built at all), the backbone client when the operator asked for one, dot-user, dot-user-avatar over the game's schema, and a hub, then `avatar_for(key)`. Two games' copies differed in one line once the class names were taken out. It lives here, and a game hands it two things: `avatar_schema` and `stock_avatar_fn`. game-fatal-contact and game-airdrift subclass it; the games on dot-game return one from `_make_identity()`.
 
 - **The stock look is the platform's answer too.** It hands `stock_avatar_fn` to the avatar manager as `default_avatar_fn`, so a first-time player with nothing stored is resolved to the game's stock look for their scoped key rather than the schema's one default.
 - **`avatar_for` is never null while there is a schema.** Platform first, then the game's stock function, then `default_avatar()`. A game with no schema builds no avatar manager and gets null, which is the honest answer for a game with no avatars.

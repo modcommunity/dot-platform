@@ -13,8 +13,8 @@ extends Node
 ## dot-platform joins the three into ONE admission, as its own DotModule.
 ## [/codeblock]
 ##
-## [b]This is the identity layer every game had a copy of.[/b] game-arena's was 262 lines
-## and game-g2gfast's 215, and with the class names taken out they differed in one line:
+## [b]This is the identity layer every game had a copy of.[/b] game-fatal-contact's was 262 lines
+## and game-airdrift's 215, and with the class names taken out they differed in one line:
 ## which avatar schema, and which stock avatar a player without one gets. Those are the two
 ## things a game hands this; everything else is the chain.
 ##
